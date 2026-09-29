@@ -486,3 +486,6 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;display
 .selhdr{background:linear-gradient(var(--accent-soft),var(--accent-soft)),var(--paper);min-height:76px;box-shadow:0 1px 0 var(--line)}
 body.selecting .fab,body.selecting .nav{display:none!important}
 .swatches .sw{flex-shrink:0}
+.tpl-new{border:1.5px dashed var(--line)!important;background:transparent!important;justify-content:center;align-items:center;text-align:center;min-height:150px;cursor:pointer}
+.tpl-new:active{background:var(--accent-soft)!important}
+.tpl-plus{width:44px;height:44px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}

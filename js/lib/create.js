@@ -2,7 +2,9 @@
 import * as store from '../store.js';
 import { builtinTemplates, cloneBlocks } from './templates.js';
 import { compressImage } from './image.js';
-import { fmtDay } from '../i18n.js';
+import { fmtDay, t } from '../i18n.js';
+import { promptText, snack } from '../ui.js';
+import { noteTitle } from '../components.js';
 
 const tb = () => ({ id: store.uid(), t: 'text', html: '' });
 
@@ -58,4 +60,16 @@ export async function createPhotoNote(files, query = {}) {
   const bookId = query.book && store.book(query.book) ? query.book : null;
   const blocks = await imageBlocks(files, { scan: !!query.scan });
   return store.createNote({ type: 'photo', bookId, blocks: [...blocks, tb()] });
+}
+
+// Simpan catatan sebagai template buatan sendiri. Mengembalikan template, atau null jika batal.
+export async function saveNoteAsTemplate(note) {
+  const name = await promptText({ title: t('Simpan sebagai template'), value: noteTitle(note), placeholder: t('Nama template') });
+  if (!name) return null;
+  const blocks = JSON.parse(JSON.stringify(note.blocks.filter(b => !b.att)));
+  blocks.forEach(b => { if (b.items) b.items.forEach(i => { i.done = false; }); });
+  if (!blocks.length) blocks.push(tb());
+  const tp = await store.saveTemplate({ name, desc: t('Template buatanmu'), type: note.type === 'journal' ? 'text' : note.type, color: note.color || 'k8', blocks, title: '' });
+  snack(t('Template “{n}” tersimpan', { n: name }));
+  return tp;
 }

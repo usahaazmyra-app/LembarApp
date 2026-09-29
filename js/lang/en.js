@@ -741,5 +741,10 @@ export default {
 "Arang": "Charcoal",
 "Indonesia": "Indonesian",
 "Inggris": "English",
-"Belum ada isi. Ketuk untuk menulis.": "Nothing here yet. Tap to write."
+"Belum ada isi. Ketuk untuk menulis.": "Nothing here yet. Tap to write.",
+"Pilih catatan yang ingin dijadikan template.": "Pick a note to turn into a template.",
+"Belum ada catatan. Tulis dulu isi template-nya, lalu ketuk ⋯ dan pilih “Simpan sebagai template”.": "No notes yet. Write the template content first, then tap ⋯ and choose “Save as template”.",
+"Tulis catatan baru": "Write a new note",
+"Isi dan susunan catatan akan disalin. Foto dan rekaman tidak ikut.": "The note content and layout are copied. Photos and recordings are not included.",
+"Jadikan template": "Make a template"
 };

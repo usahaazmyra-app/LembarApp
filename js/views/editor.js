@@ -536,16 +536,7 @@ export async function render(view, [id], ctx, query = {}) {
       h('div', { class: 'menu-list', style: 'border-top:1px solid var(--line);padding-top:6px' },
         mrow('folder', t('Pindah ke buku'), async () => { sh.close(); const b = await pickBook(note.bookId); if (b === undefined) return; note.bookId = b; await store.saveNote(note, { touch: false }); drawChip(); }, '', store.book(note.bookId)?.name || t('Tanpa buku')),
         mrow('label', t('Atur tag'), async () => { sh.close(); const r = await pickTags(note.tags || []); if (!r) return; note.tags = r; await store.saveNote(note, { touch: false }); drawTags(); }, '', t('{n} tag', { n: store.noteTags(note).length })),
-        mrow('template', t('Simpan sebagai template'), async () => {
-          sh.close();
-          const { promptText } = await import('../ui.js');
-          const name = await promptText({ title: t('Simpan sebagai template'), value: noteTitle(note), placeholder: t('Nama template') });
-          if (!name) return;
-          const blocks = JSON.parse(JSON.stringify(note.blocks.filter(b => !b.att)));
-          blocks.forEach(b => { if (b.items) b.items.forEach(i => { i.done = false; }); });
-          await store.saveTemplate({ name, desc: t('Template buatanmu'), type: note.type === 'journal' ? 'text' : note.type, color: note.color || 'k8', blocks, title: '' });
-          snack(t('Template “{n}” tersimpan', { n: name }));
-        }),
+        mrow('template', t('Simpan sebagai template'), async () => { sh.close(); const { saveNoteAsTemplate } = await import('../lib/create.js'); await saveNoteAsTemplate(note); }),
         mrow('copy', t('Duplikat'), async () => { sh.close(); const c = await store.duplicateNote(note.id); snack(t('Catatan diduplikat')); ctx.navigate('note/' + c.id); }),
         mrow('archive', note.archived ? t('Keluarkan dari arsip') : t('Arsipkan'), async () => { sh.close(); const was = note.archived; await store.archiveNotes([note.id], !was); if (!was) { ctx.back(); snack(t('Catatan diarsipkan'), { label: t('Urungkan'), icon: 'undo', onClick: () => store.archiveNotes([note.id], false) }); } else snack(t('Dikeluarkan dari arsip')); }),
         mrow('trash', t('Pindahkan ke Sampah'), async () => { sh.close(); await store.trashNotes([note.id]); ctx.back(); snack(t('1 catatan dipindah ke Sampah'), { label: t('Urungkan'), icon: 'undo', onClick: () => store.restoreNotes([note.id]) }); }, 'danger')),
