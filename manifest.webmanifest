@@ -1,0 +1,41 @@
+{
+  "id": "lembar",
+  "name": "Lembar: Catatan Offline",
+  "short_name": "Lembar",
+  "description": "Aplikasi catatan offline. Teks, checklist, sketsa, rekaman suara, foto, dan jurnal harian, semuanya tersimpan di HP tanpa akun.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#FAF7F2",
+  "theme_color": "#FAF7F2",
+  "categories": ["productivity", "utilities", "education"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Catatan baru", "short_name": "Catatan", "url": "./#/new/text", "icons": [{ "src": "icons/sc-new.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Checklist baru", "short_name": "Checklist", "url": "./#/new/checklist", "icons": [{ "src": "icons/sc-check.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Jurnal hari ini", "short_name": "Jurnal", "url": "./#/journal/today", "icons": [{ "src": "icons/sc-journal.png", "sizes": "96x96", "type": "image/png" }] }
+  ],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
+  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
+  "screenshots": [
+    { "src": "screenshots/home-phone.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Beranda Lembar" },
+    { "src": "screenshots/editor-phone.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Editor catatan" },
+    { "src": "screenshots/checklist-phone.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Checklist" },
+    { "src": "screenshots/tablet.png", "sizes": "2560x1600", "type": "image/png", "form_factor": "wide", "label": "Tampilan tablet 3 kolom" }
+  ]
+}

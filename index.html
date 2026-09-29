@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="theme-color" content="#FAF7F2">
+<meta name="description" content="Lembar: aplikasi catatan offline. Teks, checklist, sketsa, rekaman suara, foto, dan jurnal harian, semuanya tersimpan di HP tanpa akun.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lembar">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Lembar</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="css/app.css">
+<script src="js/boot.js"></script>
+</head>
+<body>
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 88 88"><rect width="88" height="88" rx="26" fill="#C24E2E"/><path d="M28 20h22l14 14v32a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4V24a4 4 0 0 1 4-4z" fill="#FAF7F2"/><path d="M50 20v14h14z" fill="#F2C9B8"/><path d="M32 46h22M32 55h14" stroke="#C24E2E" stroke-width="3.5" stroke-linecap="round"/></svg>
+  <span style="font-family:var(--serif);font-size:2.4rem;font-weight:700">Lembar</span>
+</div>
+<div id="app">
+  <aside id="side" aria-label="Menu"></aside>
+  <main id="main">
+    <section id="pane-a" class="pane"></section>
+    <section id="pane-b" class="pane"></section>
+  </main>
+</div>
+<div id="overlays"></div>
+<div id="snack" aria-live="polite"></div>
+<div id="print" aria-hidden="true"></div>
+<noscript><p style="padding:24px;font-family:system-ui">Lembar membutuhkan JavaScript. Aktifkan JavaScript di browser lalu muat ulang halaman ini.</p></noscript>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
