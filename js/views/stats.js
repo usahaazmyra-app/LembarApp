@@ -2,7 +2,7 @@
 import * as store from '../store.js';
 import { h, clear } from '../ui.js';
 import { icon } from '../icons.js';
-import { t, fmtWeekdayShort, fmtNum, locale } from '../i18n.js';
+import { t, fmtWeekdayShort, fmtNum, locale, fmtTime } from '../i18n.js';
 import { header, MOODS } from '../components.js';
 
 function longestStreak(days) {
@@ -26,7 +26,7 @@ export function render(view, args, ctx) {
     const st = store.streak(); const longest = longestStreak(store.settings().activeDays || []);
     body.appendChild(h('div', { style: 'border-radius:22px;background:var(--accent-soft);padding:18px;display:flex;align-items:center;gap:16px' },
       h('div', { style: 'width:72px;height:72px;border-radius:36px;background:var(--accent);color:var(--on-accent);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0' }, h('b', { style: 'font:600 1.75rem/1 var(--serif)' }, st), h('span', { style: 'font-size:.66rem;font-weight:700' }, t('hari'))),
-      h('div', {}, h('b', { style: 'font-size:1rem' }, t('Streak menulis')), h('p', { class: 'small', style: 'margin:2px 0 0;color:var(--ink2)' }, t('Terpanjang: {n} hari.', { n: longest }) + ' ' + (st ? t('Tulis satu catatan lagi hari ini untuk lanjut.') : t('Tulis satu catatan hari ini untuk memulai.'))))));
+      h('div', {}, h('b', { style: 'font-size:1rem' }, t('Streak menulis')), h('p', { class: 'small', style: 'margin:2px 0 0;color:var(--ink2)' }, t('Terpanjang: {n} hari.', { n: longest }) + ' ' + ((store.settings().activeDays || []).includes(store.dayKey()) ? t('Kamu sudah menulis hari ini. Pertahankan!') : st ? t('Tulis satu catatan lagi hari ini untuk lanjut.') : t('Tulis satu catatan hari ini untuk memulai.'))))));
     body.appendChild(h('div', { class: 'seg' }, [['week', t('Minggu')], ['month', t('Bulan')], ['year', t('Tahun')]].map(([k, l]) => h('button', { type: 'button', class: range === k ? 'on' : '', onClick: () => { range = k; draw(); } }, l))));
     // --- data grafik
     const now = new Date(); let labels = [], vals = [], cur = 0, sum = '';
@@ -70,7 +70,7 @@ export function render(view, args, ctx) {
     if (all.length >= 3) {
       const buckets = new Array(12).fill(0); all.forEach(n => { buckets[Math.floor(new Date(n.createdAt).getHours() / 2)]++; });
       const b = buckets.indexOf(Math.max(...buckets));
-      const hh = x => String(x).padStart(2, '0') + '.00';
+      const hh = x => fmtTime(new Date(2000, 0, 1, x, 0).getTime());
       body.appendChild(h('div', { class: 'notice k7' }, icon(b >= 9 || b < 3 ? 'moon' : 'sun', 's'), t('Kamu paling sering menulis pukul {a}–{b}.', { a: hh(b * 2), b: hh((b * 2 + 2) % 24) })));
     }
   };

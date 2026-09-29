@@ -51,8 +51,9 @@ export function renderManage(view, args, ctx) {
   async function rename(tg) {
     const v = await promptText({ title: t('Ganti nama #{t}', { t: tg.name }), message: t('Berlaku di {n} catatan.', { n: tg.count }), value: tg.name, maxlength: 40 });
     if (!v) return;
-    const to = v.replace(/^#/, '').trim().toLowerCase().replace(/\s+/g, '-');
-    if (!to || to === tg.name) return;
+    const to = v.replace(/^#/, '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}_-]/gu, '');
+    if (!to) { snack(t('Nama tag hanya boleh huruf, angka, - dan _')); return; }
+    if (to === tg.name) return;
     await store.renameTag(tg.name, to); snack(t('Tag diganti menjadi #{t}', { t: to }));
   }
   function merge(tg, tags) {

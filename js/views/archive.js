@@ -7,7 +7,7 @@ import { header, emptyState } from '../components.js';
 import { collection } from '../collection.js';
 
 export function render(view, args, ctx) {
-  view.appendChild(header(t('Arsip'), { backTo: 'books', actions: [h('a', { class: 'ib', href: '#/search', 'aria-label': t('Cari') }, icon('search'))] }, ctx));
+  view.appendChild(header(t('Arsip'), { backTo: 'books', actions: [h('a', { class: 'ib', href: '#/search?archive=1', 'aria-label': t('Cari di arsip') }, icon('search'))] }, ctx));
   const listHost = h('div');
   const count = h('span', { class: 'lbl' });
   view.appendChild(h('div', { class: 'scroll' }, h('div', { class: 'wrap stack pad-b' },

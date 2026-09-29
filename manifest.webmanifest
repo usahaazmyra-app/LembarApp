@@ -31,7 +31,7 @@
     "method": "GET",
     "params": { "title": "title", "text": "text", "url": "url" }
   },
-  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
+  "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
   "screenshots": [
     { "src": "screenshots/home-phone.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Beranda Lembar" },
     { "src": "screenshots/editor-phone.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Editor catatan" },

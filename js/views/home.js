@@ -6,8 +6,9 @@ import { t, fmtDay, greeting } from '../i18n.js';
 import { collection } from '../collection.js';
 import { emptyState } from '../components.js';
 
+let filter = 'all'; // filter terakhir tetap dipakai saat kembali ke Beranda
 export function render(view, args, ctx) {
-  let filter = 'all';
+  if (filter.startsWith('#') && !store.allTags().some(x => '#' + x.name === filter)) filter = 'all';
   const scroller = h('div', { class: 'scroll' });
   const wrap = h('div', { class: 'wrap stack pad-nav' });
   const pull = h('div', { class: 'pull-hint' }, icon('down', 's'), t('Lepas untuk catat kilat'));

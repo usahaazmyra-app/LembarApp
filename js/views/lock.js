@@ -94,18 +94,27 @@ function pinPad({ title, sub, onDigits, bio, onBio, onForgot, onCancel, lengthRe
   return el;
 }
 
-let attempts = 0, lockedUntil = 0;
+// jumlah percobaan disimpan, jadi tidak ter-reset dengan memuat ulang aplikasi.
+// Setiap kali terkunci, waktu tunggu berlipat: 30 detik, 1 menit, 2 menit, ... maks 15 menit.
 async function checkPinAttempt(pin) {
-  if (Date.now() < lockedUntil) return t('Terlalu banyak percobaan. Coba lagi dalam {n} detik.', { n: Math.ceil((lockedUntil - Date.now()) / 1000) });
-  if (await verifyPin(pin)) { attempts = 0; return true; }
-  attempts++;
-  if (attempts >= 5) { lockedUntil = Date.now() + 30000; attempts = 0; return t('Terlalu banyak percobaan. Coba lagi dalam {n} detik.', { n: 30 }); }
-  return t('PIN salah. Sisa {n} percobaan.', { n: 5 - attempts });
+  const f = store.settings().pinFail || { n: 0, until: 0, rounds: 0 };
+  const wait = until => t('Terlalu banyak percobaan. Coba lagi dalam {n} detik.', { n: Math.ceil((until - Date.now()) / 1000) });
+  if (Date.now() < f.until) return wait(f.until);
+  if (await verifyPin(pin)) { if (f.n || f.rounds) await store.setSetting('pinFail', null); return true; }
+  const n = f.n + 1;
+  if (n >= 5) {
+    const rounds = (f.rounds || 0) + 1;
+    const until = Date.now() + Math.min(15 * 60, 30 * 2 ** (rounds - 1)) * 1000;
+    await store.setSetting('pinFail', { n: 0, until, rounds });
+    return wait(until);
+  }
+  await store.setSetting('pinFail', { ...f, n });
+  return t('PIN salah. Sisa {n} percobaan.', { n: 5 - n });
 }
 
 // Minta buka kunci (untuk catatan/buku terkunci). Resolve true bila berhasil.
-export function requestUnlock({ title = t('Masukkan PIN') } = {}) {
-  if (store.session.unlocked) return Promise.resolve(true);
+export function requestUnlock({ title = t('Masukkan PIN'), force = false } = {}) {
+  if (store.session.unlocked && !force) return Promise.resolve(true);
   if (!store.hasPin()) { snack(t('Atur PIN dulu di Pengaturan · Keamanan')); return Promise.resolve(false); }
   return new Promise(resolve => {
     let done = false, fs;
@@ -150,7 +159,8 @@ export function setupPin({ requireOld = true } = {}) {
     let fs, step = (requireOld && store.hasPin()) ? 'old' : 'new', first = '';
     const host = h('div', { style: 'position:absolute;inset:0' });
     let pad = null;
-    const finish = ok => { pad && pad._cleanup && pad._cleanup(); fs.close(); resolve(ok); };
+    let settledPin = false;
+    const finish = ok => { if (settledPin) return; settledPin = true; pad && pad._cleanup && pad._cleanup(); fs.close(); resolve(ok); };
     const drawPad = () => {
       pad && pad._cleanup && pad._cleanup();
       const titles = { old: t('Masukkan PIN lama'), new: t('Buat PIN baru'), repeat: t('Ulangi PIN') };
@@ -196,7 +206,7 @@ export function setupPin({ requireOld = true } = {}) {
           saveBtn)));
       setTimeout(() => ans.focus(), 50);
     };
-    fs = fullscreen(host, { onClose: () => { pad && pad._cleanup && pad._cleanup(); } });
+    fs = fullscreen(host, { onClose: () => { pad && pad._cleanup && pad._cleanup(); if (!settledPin) { settledPin = true; resolve(false); } } });
     drawPad();
   });
 }
@@ -234,7 +244,7 @@ export function openForgot(onSuccess) {
 }
 
 export async function removePin() {
-  for (const k of ['pinHash', 'pinSalt', 'recoveryQ', 'recoveryHash', 'bioCred']) await store.setSetting(k, null);
+  for (const k of ['pinHash', 'pinSalt', 'recoveryQ', 'recoveryHash', 'bioCred', 'pinFail']) await store.setSetting(k, null);
   await store.setSetting('bio', false);
   await store.setSetting('appLock', false);
   const lockedBooks = store.books().filter(b => b.locked);

@@ -1,5 +1,6 @@
 // Lembar · state & data layer
 import { db } from './db.js';
+import { t } from './i18n.js';
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const DAY = 86400000;
@@ -121,8 +122,10 @@ export async function saveBook(b) {
   return nb;
 }
 export async function deleteBook(id) {
+  const bk = S.books.get(id);
   const affected = [...S.notes.values()].filter(n => n.bookId === id);
-  for (const n of affected) n.bookId = null;
+  // catatan dari buku terkunci tetap terkunci setelah bukunya dihapus
+  for (const n of affected) { n.bookId = null; if (bk && bk.locked) n.locked = true; }
   if (affected.length) await db.putMany('notes', affected);
   S.books.delete(id);
   await db.delete('books', id);
@@ -198,7 +201,7 @@ export async function duplicateNote(id) {
   if (!src) return null;
   const copy = JSON.parse(JSON.stringify(src));
   delete copy.id;
-  copy.title = src.title ? src.title + ' (salinan)' : '';
+  copy.title = src.title ? src.title + ' (' + t('salinan') + ')' : '';
   copy.pinned = false; copy.reminder = null;
   // duplicate attachments so deleting one copy does not break the other
   for (const b of copy.blocks) {
@@ -293,18 +296,20 @@ export function noteTags(n) {
 export function allTags() {
   const counts = new Map();
   for (const n of allNotes()) {
-    if (n.trashedAt) continue;
+    if (n.trashedAt || isConcealed(n)) continue;
     for (const t of noteTags(n)) counts.set(t, (counts.get(t) || 0) + 1);
   }
   return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
 function replaceTagInHtml(html, from, to) {
-  const re = new RegExp('(^|[\\s(>])#' + from.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '(?![\\p{L}\\p{N}_-])', 'giu');
+  const re = new RegExp('(^|[\\s(>\\u00a0]|&nbsp;)#' + from.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '(?![\\p{L}\\p{N}_-])', 'giu');
   return (html || '').replace(re, (m, pre) => to ? pre + '#' + to : pre + from);
 }
 export async function renameTag(from, to) {
-  to = (to || '').replace(/^#/, '').trim().toLowerCase();
+  const raw = (to || '').replace(/^#/, '').trim();
+  to = raw.toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}_-]/gu, '');
+  if (raw && !to) return 0; // nama baru tidak valid: jangan sampai tag terhapus
   const changed = [];
   for (const n of allNotes()) {
     if (!noteTags(n).includes(from)) continue;
@@ -313,6 +318,7 @@ export async function renameTag(from, to) {
       if (b.html) b.html = replaceTagInHtml(b.html, from, to);
       if (b.t === 'check') b.items.forEach(i => { i.text = replaceTagInHtml(i.text, from, to); });
     }
+    textCache.delete(n);
     changed.push(n);
   }
   if (changed.length) await db.putMany('notes', changed);
@@ -346,7 +352,7 @@ export function streak() {
   const set = new Set(S.settings.activeDays || []);
   let d = new Date(); let count = 0;
   if (!set.has(dayKey(d))) d = new Date(Date.now() - DAY);
-  while (set.has(dayKey(d))) { count++; d = new Date(d.getTime() - DAY); }
+  while (set.has(dayKey(d))) { count++; d = new Date(d); d.setDate(d.getDate() - 1); }
   return count;
 }
 export function weekActivity() {
@@ -370,7 +376,11 @@ export function nextOccurrence(r, from = Date.now()) {
     else if (r.repeat === 'weekly') {
       const days = (r.days && r.days.length) ? r.days : [t.getDay()];
       do { t.setDate(t.getDate() + 1); } while (!days.includes(t.getDay()));
-    } else if (r.repeat === 'monthly') t.setMonth(t.getMonth() + 1);
+    } else if (r.repeat === 'monthly') {
+      const dom = r.dom || new Date(r.at).getDate();
+      t.setDate(1); t.setMonth(t.getMonth() + 1);
+      t.setDate(Math.min(dom, new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()));
+    }
   };
   step();
   let guard = 0;
@@ -398,36 +408,52 @@ export async function exportData({ media = true } = {}) {
 
 export async function importData(data, mode = 'merge', onProgress = () => {}) {
   if (!data || data.app !== 'lembar' || !Array.isArray(data.notes)) throw new Error('bad-file');
-  const total = data.notes.length + (data.attachments || []).length;
-  let done = 0; const tick = () => onProgress(++done, total);
+  // 1) urai semua lampiran dulu: file rusak berhenti di sini sebelum data lama disentuh
+  const fileAtts = (data.attachments || []).map(a => ({ id: a.id, type: a.type, blob: base64ToBlob(a.data, a.type) }));
+  const wasEmpty = S.notes.size === 0;
+  let done = 0, total = 1; const tick = () => onProgress(++done, total);
+  const incoming = data.notes.map(normalizeNote);
+  // 2) tentukan catatan mana yang ditambah / diperbarui
+  let added = 0, updated = 0;
+  const changed = [];
+  if (mode === 'replace') { changed.push(...incoming); added = incoming.length; }
+  else for (const n of incoming) {
+    const cur = S.notes.get(n.id);
+    if (!cur) { added++; changed.push(n); } else if (n.updatedAt > cur.updatedAt) { updated++; changed.push(n); }
+  }
+  total = Math.max(1, changed.length + fileAtts.length);
+  const changedAtts = new Set(changed.flatMap(noteAttachments));
+  const existingAtts = new Set((await allAttachments()).map(a => a.id));
+  // 3) tulis lampiran: yang belum ada, atau milik catatan yang ikut dipulihkan
+  for (const a of fileAtts) {
+    if (!existingAtts.has(a.id) || changedAtts.has(a.id)) {
+      await db.put('attachments', { id: a.id, blob: a.blob, type: a.type, size: a.blob.size, createdAt: Date.now() });
+      if (urlCache.has(a.id)) { URL.revokeObjectURL(urlCache.get(a.id)); urlCache.delete(a.id); }
+    }
+    tick();
+  }
+  // 4) ganti semua: hapus data lama, tapi lampiran yang masih dipakai catatan pulihan tetap disimpan
   if (mode === 'replace') {
-    const oldAtts = (await allAttachments()).map(a => a.id);
     await db.clear('notes'); await db.clear('books'); await db.clear('templates');
-    if (oldAtts.length) await deleteAttachments(oldAtts);
+    const keepAtt = new Set([...changedAtts, ...fileAtts.map(a => a.id)]);
+    const drop = [...existingAtts].filter(id => !keepAtt.has(id));
+    if (drop.length) await deleteAttachments(drop);
     S.notes.clear(); S.books.clear(); S.templates.clear();
   }
-  let added = 0, updated = 0;
-  for (const a of data.attachments || []) {
-    const blob = base64ToBlob(a.data, a.type);
-    await db.put('attachments', { id: a.id, blob, type: a.type, size: blob.size, createdAt: Date.now() });
-    tick();
-  }
-  for (const b of data.books || []) { if (!S.books.has(b.id)) { S.books.set(b.id, b); } }
+  for (const b of data.books || []) { if (mode === 'replace' || !S.books.has(b.id)) S.books.set(b.id, b); }
   await db.putMany('books', [...S.books.values()]);
-  for (const t of data.templates || []) { S.templates.set(t.id, t); }
+  for (const t of data.templates || []) { if (mode === 'replace' || !S.templates.has(t.id)) S.templates.set(t.id, t); }
   await db.putMany('templates', [...S.templates.values()]);
-  const changed = [];
-  for (const raw of data.notes) {
-    const n = normalizeNote(raw);
-    const cur = S.notes.get(n.id);
-    if (!cur) { added++; changed.push(n); S.notes.set(n.id, n); }
-    else if (n.updatedAt > cur.updatedAt) { updated++; changed.push(n); S.notes.set(n.id, n); }
-    tick();
-  }
+  for (const n of changed) { S.notes.set(n.id, n); textCache.delete(n); tick(); }
   if (changed.length) await db.putMany('notes', changed);
-  if (data.settings && data.settings.activeDays) {
-    const merged = [...new Set([...(S.settings.activeDays || []), ...data.settings.activeDays])].sort();
+  const st = data.settings || {};
+  if (st.activeDays) {
+    const merged = [...new Set([...(mode === 'replace' ? [] : (S.settings.activeDays || [])), ...st.activeDays])].sort();
     await setSetting('activeDays', merged);
+  }
+  // tampilan ikut dipulihkan saat mengganti semua, atau saat HP ini masih kosong
+  if (mode === 'replace' || wasEmpty) {
+    for (const k of ['theme', 'accent', 'fontSize', 'lang', 'view']) if (st[k] != null) await setSetting(k, st[k]);
   }
   emit('notes'); emit('books'); emit('templates');
   return { added, updated };

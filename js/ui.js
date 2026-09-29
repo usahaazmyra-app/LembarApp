@@ -105,6 +105,13 @@ function unregister(entry, fromBack) {
   if (!fromBack) { ignorePops++; history.back(); }
 }
 export function overlayOpen() { return stack.length > 0; }
+// Entri riwayat tanpa tampilan: tombol Kembali memanggil onBack (dipakai mode pilih)
+export function backHandler(onBack) {
+  let closed = false;
+  const entry = { close(fromBack, silent) { if (closed) return; closed = true; if (!silent) unregister(entry, fromBack); onBack(); } };
+  register(entry);
+  return { release() { if (closed) return; closed = true; unregister(entry, false); } };
+}
 export function closeAllOverlays() {
   return new Promise(resolve => {
     if (!stack.length) return resolve();
@@ -236,7 +243,7 @@ export function snack(message, action) {
   root.appendChild(el);
   requestAnimationFrame(() => el.classList.add('in'));
   const hide = () => { el.classList.remove('in'); setTimeout(() => el.remove(), 200); };
-  snackTimer = setTimeout(hide, action ? 5000 : 2600);
+  snackTimer = setTimeout(hide, (action && action.duration) || (action ? 5000 : 2600));
   return hide;
 }
 
@@ -274,6 +281,7 @@ export function swipeable(row, { onLeft, onRight, leftLabel, rightLabel }) {
     row.classList.toggle('to-right', dx > 0);
     row.classList.toggle('to-left', dx < 0);
   }, { passive: true });
+  row.addEventListener('touchcancel', () => { active = false; card.style.transition = ''; card.style.transform = ''; row.classList.remove('to-right', 'to-left'); });
   row.addEventListener('touchend', () => {
     if (!active) return; active = false;
     card.style.transition = '';
@@ -292,10 +300,9 @@ export function pickFile({ accept = '*/*', capture = null, multiple = false } = 
     if (capture) input.setAttribute('capture', capture);
     if (multiple) input.multiple = true;
     input.addEventListener('change', () => { resolve([...input.files]); input.remove(); });
+    input.addEventListener('cancel', () => { resolve([]); input.remove(); });
     document.body.appendChild(input);
     input.click();
-    // jika dibatalkan, tidak ada event; biarkan promise menggantung dengan aman
-    setTimeout(() => { if (!input.files || !input.files.length) { /* keep */ } }, 60000);
   });
 }
 export function download(blob, filename) {

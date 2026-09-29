@@ -12,10 +12,13 @@ import { openShare } from '../lib/share.js';
 import { ensureNotifyPermission } from '../lib/reminders.js';
 
 const uid = store.uid;
+const players = new Set();
+const stopPlayers = (except) => players.forEach(a => { if (a !== except) a.pause(); });
 const REPEAT_LABEL = { daily: 'Setiap hari', weekly: 'Setiap minggu', monthly: 'Setiap bulan' };
 
 export function isEmptyNote(n) {
   if (n.mood != null) return false;
+  if (n.reminder || (n.tags && n.tags.length) || n.pinned || n.locked || n.color) return false;
   if (n.type !== 'journal' && n.title && n.title.trim()) return false;
   for (const b of n.blocks) {
     if (b.att) return false;
@@ -49,6 +52,9 @@ export async function render(view, [id], ctx, query = {}) {
   const setSaved = busy => { savedEl.classList.toggle('busy', busy); savedEl.replaceChildren(busy ? '' : icon('tick', 's'), busy ? t('Menyimpan…') : t('Tersimpan')); };
 
   let dirty = false;
+  let leaving = false; // true saat pindah ke sketsa: jangan hapus catatan kosong
+  let disposed = false, hideUndo = null;
+  const removedAtts = new Set();
   const doSave = async () => {
     collect();
     dirty = false;
@@ -108,8 +114,8 @@ export async function render(view, [id], ctx, query = {}) {
   view.append(top, scroller, sugg, toolbar);
   view.classList.add('editor');
   if (note.color) view.classList.add(note.color);
-  if (note.trashedAt) view.insertBefore(h('div', { class: 'notice k4', style: 'margin:0 12px 6px' }, icon('trash', 's'), h('span', { class: 'grow' }, t('Catatan ini ada di Sampah.')), h('button', { class: 'btn g sm', type: 'button', onClick: async () => { await store.restoreNotes([note.id]); snack(t('Catatan dipulihkan')); ctx.navigate('note/' + note.id, { replace: true }); } }, t('Pulihkan'))), scroller);
-  if (note.archived) view.insertBefore(h('div', { class: 'notice k7', style: 'margin:0 12px 6px' }, icon('archive', 's'), h('span', { class: 'grow' }, t('Catatan ini diarsipkan.')), h('button', { class: 'btn g sm', type: 'button', onClick: async () => { await store.archiveNotes([note.id], false); snack(t('Dikeluarkan dari arsip')); ctx.navigate('note/' + note.id, { replace: true }); } }, t('Keluarkan'))), scroller);
+  if (note.trashedAt) view.insertBefore(h('div', { class: 'notice k4', style: 'margin:0 12px 6px' }, icon('trash', 's'), h('span', { class: 'grow' }, t('Catatan ini ada di Sampah.')), h('button', { class: 'btn g sm', type: 'button', onClick: async () => { await store.restoreNotes([note.id]); snack(t('Catatan dipulihkan')); ctx.refresh(); } }, t('Pulihkan'))), scroller);
+  if (note.archived) view.insertBefore(h('div', { class: 'notice k7', style: 'margin:0 12px 6px' }, icon('archive', 's'), h('span', { class: 'grow' }, t('Catatan ini diarsipkan.')), h('button', { class: 'btn g sm', type: 'button', onClick: async () => { await store.archiveNotes([note.id], false); snack(t('Dikeluarkan dari arsip')); ctx.refresh(); } }, t('Keluarkan'))), scroller);
 
   function drawMeta() {
     metaEl.replaceChildren(t('Diubah {t}', { t: fmtRelative(note.updatedAt) }) + ' · ' + t('{n} kata', { n: store.wordCount(note) }));
@@ -150,6 +156,7 @@ export async function render(view, [id], ctx, query = {}) {
 
   // ---------- blok ----------
   function drawBlocks() {
+    stopPlayers(); savedRange = null;
     clear(blocksHost); blockEls.clear();
     note.blocks.forEach((b, i) => { const el = renderBlock(b, i); blockEls.set(b.id, el); blocksHost.appendChild(el); });
   }
@@ -187,7 +194,7 @@ export async function render(view, [id], ctx, query = {}) {
       const btn = h('button', { class: 'sketch-blk', type: 'button', 'aria-label': t('Buka sketsa') });
       if (b.att) { const img = h('img', { alt: t('Sketsa') }); store.attachmentURL(b.att).then(u => { img.src = u; }); btn.appendChild(img); }
       else btn.append(h('div', { style: 'height:140px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--muted);font-weight:700' }, icon('sketch'), t('Ketuk untuk menggambar')));
-      btn.addEventListener('click', async () => { await doSave(); ctx.navigate('sketch/' + note.id + '/' + b.id); });
+      btn.addEventListener('click', async () => { await doSave(); leaving = true; ctx.navigate('sketch/' + note.id + '/' + b.id); });
       wrap.append(btn, h('div', { class: 'blk-tools' }, iconBtn('trash', t('Hapus sketsa'), () => removeBlock(b))));
     }
     return wrap;
@@ -195,12 +202,13 @@ export async function render(view, [id], ctx, query = {}) {
 
   async function removeBlock(b) {
     const idx = note.blocks.indexOf(b);
+    if (idx < 0) return;
     note.blocks.splice(idx, 1);
+    if (b.att) removedAtts.add(b.att);
     ensureTrailingText();
     await doSave();
     drawBlocks();
-    snack(t('Blok dihapus'), { label: t('Urungkan'), icon: 'undo', onClick: async () => { note.blocks.splice(idx, 0, b); await doSave(); drawBlocks(); } });
-    // lampiran dibersihkan bila catatan dihapus permanen; urungkan tetap bisa
+    hideUndo = snack(t('Blok dihapus'), { label: t('Urungkan'), icon: 'undo', onClick: async () => { if (disposed) return; if (b.att) removedAtts.delete(b.att); note.blocks.splice(Math.min(idx, note.blocks.length), 0, b); await doSave(); drawBlocks(); } });
   }
 
   function insertBlocks(blocks) {
@@ -222,6 +230,18 @@ export async function render(view, [id], ctx, query = {}) {
     const undoneHost = h('div');
     const doneHost = h('div');
     let showDone = true;
+    // blok checklist boleh dihapus kecuali satu-satunya checklist di catatan jenis Checklist
+    const removable = () => note.type !== 'checklist' || note.blocks.filter(x => x.t === 'check').length > 1;
+    const delItem = (it) => {
+      if (b.items.length === 1) {
+        if (removable() && !it.text.trim()) { removeBlock(b); return; }
+        it.text = ''; it.done = false; touch(); draw(it.id); return;
+      }
+      const i = b.items.indexOf(it);
+      b.items.splice(i, 1); touch();
+      const next = b.items[Math.min(i, b.items.length - 1)] || b.items[i - 1];
+      draw(next && next.id);
+    };
     const draw = (focusId, atEnd = true) => {
       clear(undoneHost); clear(doneHost);
       const undone = b.items.filter(i => !i.done), done = b.items.filter(i => i.done);
@@ -260,21 +280,23 @@ export async function render(view, [id], ctx, query = {}) {
         if (e.key === 'Enter') { e.preventDefault(); it.text = tx.textContent; addItem(it); }
         else if (e.key === 'Backspace' && !tx.textContent) {
           e.preventDefault();
-          const undone = b.items.filter(i => !i.done); const pos = undone.indexOf(it);
-          if (b.items.length === 1) return;
-          b.items.splice(b.items.indexOf(it), 1); touch();
-          draw(pos > 0 ? undone[pos - 1].id : (undone[1] && undone[1].id));
+          if (b.items.length === 1) { if (removable()) removeBlock(b); return; }
+          const i = b.items.indexOf(it);
+          b.items.splice(i, 1); touch();
+          const prev = b.items[i - 1] || b.items[i];
+          draw(prev && prev.id);
         }
       });
       const row = h('div', { class: 'cl-it' + (it.done ? ' dn' : ''), 'data-iid': it.id },
         cb, tx,
         !it.done ? dragHandle(it, row => row) : null,
-        h('button', { class: 'cl-del', type: 'button', 'aria-label': t('Hapus item'), onClick: () => { b.items.splice(b.items.indexOf(it), 1); if (!b.items.length) b.items.push({ id: uid(), text: '', done: false }); touch(); draw(); } }, icon('close', 's')));
+        h('button', { class: 'cl-del', type: 'button', 'aria-label': t('Hapus item'), onClick: () => { it.text = tx.textContent; delItem(it); } }, icon('close', 's')));
       return row;
     };
     const addItem = (after) => {
       const ni = { id: uid(), text: '', done: false };
-      const at = after ? b.items.indexOf(after) + 1 : b.items.filter(i => !i.done).length;
+      let last = -1; b.items.forEach((x, k) => { if (!x.done) last = k; });
+      const at = after ? b.items.indexOf(after) + 1 : last + 1;
       b.items.splice(at, 0, ni); touch(); draw(ni.id);
     };
     const dragHandle = (it) => {
@@ -316,7 +338,7 @@ export async function render(view, [id], ctx, query = {}) {
 
   // ---------- audio ----------
   function audioPlayer(b) {
-    const audio = new Audio(); audio.preload = 'metadata';
+    const audio = new Audio(); audio.preload = 'metadata'; players.add(audio);
     store.attachmentURL(b.att).then(u => { audio.src = u; });
     const peaks = resample(b.peaks || [], 44);
     const bars = peaks.map(v => h('i', { style: `height:${Math.max(4, Math.round(v * 32))}px` }));
@@ -324,7 +346,7 @@ export async function render(view, [id], ctx, query = {}) {
     const playBtn = h('button', { class: 'play', type: 'button', 'aria-label': t('Putar rekaman') }, icon('play', 's'));
     const time = h('span', {}, '0:00 / ' + fmtDur(b.dur));
     const speeds = [1, 1.5, 2]; let sp = 0;
-    const spBtn = h('button', { class: 'tagpill', type: 'button', style: 'border:0;background:var(--surface)', onClick: () => { sp = (sp + 1) % 3; audio.playbackRate = speeds[sp]; spBtn.textContent = speeds[sp].toString().replace('.', ',') + '×'; } }, '1×');
+    const spBtn = h('button', { class: 'tagpill', type: 'button', style: 'border:0;background:var(--surface)', onClick: () => { sp = (sp + 1) % 3; audio.playbackRate = speeds[sp]; spBtn.textContent = speeds[sp].toLocaleString(document.documentElement.lang) + '×'; } }, '1×');
     const upd = () => {
       const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : b.dur || 1;
       const p = audio.currentTime / dur;
@@ -334,13 +356,14 @@ export async function render(view, [id], ctx, query = {}) {
     };
     bars.forEach(el => el.classList.add('dim'));
     audio.addEventListener('timeupdate', upd);
-    audio.addEventListener('ended', () => { playBtn.replaceChildren(icon('play', 's')); audio.currentTime = 0; upd(); });
+    const setPlayIcon = () => { playBtn.replaceChildren(icon('play', 's')); playBtn.setAttribute('aria-label', t('Putar rekaman')); };
+    audio.addEventListener('ended', () => { setPlayIcon(); audio.currentTime = 0; upd(); });
     playBtn.addEventListener('click', () => {
-      if (audio.paused) { document.querySelectorAll('audio').forEach(a => a.pause()); audio.play().catch(() => snack(t('Rekaman tidak bisa diputar'))); playBtn.replaceChildren(icon('pause', 's')); playBtn.setAttribute('aria-label', t('Jeda rekaman')); }
+      if (audio.paused) { stopPlayers(audio); audio.play().catch(() => snack(t('Rekaman tidak bisa diputar'))); playBtn.replaceChildren(icon('pause', 's')); playBtn.setAttribute('aria-label', t('Jeda rekaman')); }
       else { audio.pause(); playBtn.replaceChildren(icon('play', 's')); playBtn.setAttribute('aria-label', t('Putar rekaman')); }
     });
-    audio.addEventListener('pause', () => playBtn.replaceChildren(icon('play', 's')));
-    wave.addEventListener('click', e => { const r = wave.getBoundingClientRect(); const p = (e.clientX - r.left) / r.width; const dur = isFinite(audio.duration) ? audio.duration : b.dur; audio.currentTime = Math.max(0, p * dur); upd(); });
+    audio.addEventListener('pause', setPlayIcon);
+    wave.addEventListener('click', e => { const r = wave.getBoundingClientRect(); const p = (e.clientX - r.left) / r.width; const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : b.dur; if (!dur) return; audio.currentTime = Math.max(0, p * dur); upd(); });
     return h('div', { class: 'audio' },
       h('div', { class: 'row-flex', style: 'gap:12px' }, playBtn, wave),
       h('div', { class: 'meta', style: 'justify-content:space-between;color:var(--ink2)' }, time,
@@ -354,7 +377,7 @@ export async function render(view, [id], ctx, query = {}) {
       const cur = items.findIndex(x => x.classList.contains('on'));
       if (e.key === 'ArrowDown') { e.preventDefault(); items.forEach(x => x.classList.remove('on')); items[(cur + 1) % items.length]?.classList.add('on'); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); items.forEach(x => x.classList.remove('on')); items[(cur - 1 + items.length) % items.length]?.classList.add('on'); return; }
-      if (e.key === 'Enter') { e.preventDefault(); (items[cur] || items[0])?.click(); return; }
+      if (e.key === 'Enter' && items.length) { e.preventDefault(); (items[cur] || items[0]).click(); return; }
       if (e.key === 'Escape') { hideSugg(); return; }
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); cmd('bold'); }
@@ -362,12 +385,14 @@ export async function render(view, [id], ctx, query = {}) {
   }
   function cmd(name, arg) {
     const sel = window.getSelection();
+    const ae = document.activeElement;
+    if (name === 'insertText' && ae && view.contains(ae) && (ae === titleEl || ae.classList.contains('cl-tx'))) { document.execCommand('insertText', false, arg); return; }
     const inRt = sel.anchorNode && sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest ? sel.anchorNode.parentElement.closest('.rt') || (sel.anchorNode.classList && sel.anchorNode.classList.contains('rt') ? sel.anchorNode : null) : null;
     if (!inRt) {
       const target = lastFocus && blockEls.get(lastFocus.blockId)?.querySelector('.rt') || blocksHost.querySelector('.rt');
       if (!target) return;
       target.focus();
-      if (savedRange) { sel.removeAllRanges(); sel.addRange(savedRange); } else placeCaret(target, true);
+      if (savedRange && target.contains(savedRange.startContainer)) { sel.removeAllRanges(); sel.addRange(savedRange); } else placeCaret(target, true);
     }
     if (name === 'block') {
       const cur = document.queryCommandValue('formatBlock').toLowerCase();
@@ -398,10 +423,10 @@ export async function render(view, [id], ctx, query = {}) {
       tb('code', t('Kode'), () => cmd('block', 'pre'), 'pre'),
       h('span', { class: 'sep' }),
       tb('check', t('Sisipkan checklist'), () => { const nb = { id: uid(), t: 'check', items: [{ id: uid(), text: '', done: false }] }; insertBlocks([nb]); setTimeout(() => blockEls.get(nb.id)?.querySelector('.cl-tx')?.focus(), 30); }),
-      tb('photo', t('Sisipkan foto'), async () => { const files = await pickFile({ accept: 'image/*', multiple: true }); if (!files.length) return; setSaved(true); const bl = await imageBlocks(files); insertBlocks(bl); }),
-      tb('camera', t('Ambil foto'), async () => { const files = await pickFile({ accept: 'image/*', capture: 'environment' }); if (!files.length) return; setSaved(true); insertBlocks(await imageBlocks(files)); }),
+      tb('photo', t('Sisipkan foto'), () => addPhotos({ accept: 'image/*', multiple: true })),
+      tb('camera', t('Ambil foto'), () => addPhotos({ accept: 'image/*', capture: 'environment' })),
       tb('mic', t('Rekam suara'), () => startRecording()),
-      tb('sketch', t('Sisipkan sketsa'), async () => { const nb = { id: uid(), t: 'sketch', att: null, strokes: [] }; insertBlocks([nb]); await doSave(); ctx.navigate('sketch/' + note.id + '/' + nb.id); }),
+      tb('sketch', t('Sisipkan sketsa'), async () => { const nb = { id: uid(), t: 'sketch', att: null, strokes: [] }; insertBlocks([nb]); await doSave(); leaving = true; ctx.navigate('sketch/' + note.id + '/' + nb.id); }),
       tb('link', t('Tautkan catatan'), () => { cmd('insertText', '[['); const rt = document.activeElement; if (rt && rt.classList.contains('rt')) checkLinkTrigger(rt); }),
       tb('tag', t('Tambah tag'), () => cmd('insertText', '#')),
     );
@@ -413,6 +438,16 @@ export async function render(view, [id], ctx, query = {}) {
     toolbar.querySelectorAll('button[data-k]').forEach(b => { const f = map[b.dataset.k]; if (f) { try { b.classList.toggle('on', !!f()); } catch (e) { /* noop */ } } });
   }
 
+  async function addPhotos(opts) {
+    const files = await pickFile(opts);
+    if (!files.length) return;
+    setSaved(true);
+    try {
+      const bl = await imageBlocks(files);
+      if (!bl.length) throw new Error('no image');
+      insertBlocks(bl);
+    } catch (e) { console.error(e); setSaved(false); snack(t('Foto tidak bisa dibaca. Coba format JPG atau PNG.')); }
+  }
   async function startRecording() {
     collect();
     const r = await recordAudio();
@@ -482,7 +517,7 @@ export async function render(view, [id], ctx, query = {}) {
     const list = h('div', { class: 'backlinks' });
     const btnEl = h('button', { class: 'notice', type: 'button', style: 'width:100%;background:var(--surface);border:1px solid var(--line);color:var(--ink);align-items:center', 'aria-expanded': 'false', onClick: () => {
       open = !open; btnEl.setAttribute('aria-expanded', open ? 'true' : 'false'); btnEl.lastChild.replaceWith(icon(open ? 'up' : 'down', 's'));
-      list.replaceChildren(...(open ? refs.map(n => h('a', { class: 'lrow', href: '#/note/' + n.id }, h('span', { class: 'tico' }, icon('link', 's')), h('div', { class: 'body-t' }, h('h4', {}, noteTitle(n)), h('p', {}, fmtRelative(n.updatedAt))))) : []));
+      list.replaceChildren(...(open ? refs.map(n => h('a', { class: 'lrow', href: '#/note/' + n.id, onClick: async e => { e.preventDefault(); await doSave(); ctx.navigate('note/' + n.id); } }, h('span', { class: 'tico' }, icon('link', 's')), h('div', { class: 'body-t' }, h('h4', {}, noteTitle(n)), h('p', {}, fmtRelative(n.updatedAt))))) : []));
     } }, icon('link', 's'), h('span', { class: 'grow', style: 'text-align:left' }, t('Disebut di {n} catatan lain', { n: refs.length })), icon('down', 's'));
     backHost.append(h('div', { class: 'sp' }), btnEl, list);
   }
@@ -538,8 +573,8 @@ export async function render(view, [id], ctx, query = {}) {
         mrow('label', t('Atur tag'), async () => { sh.close(); const r = await pickTags(note.tags || []); if (!r) return; note.tags = r; await store.saveNote(note, { touch: false }); drawTags(); }, '', t('{n} tag', { n: store.noteTags(note).length })),
         mrow('template', t('Simpan sebagai template'), async () => { sh.close(); const { saveNoteAsTemplate } = await import('../lib/create.js'); await saveNoteAsTemplate(note); }),
         mrow('copy', t('Duplikat'), async () => { sh.close(); const c = await store.duplicateNote(note.id); snack(t('Catatan diduplikat')); ctx.navigate('note/' + c.id); }),
-        mrow('archive', note.archived ? t('Keluarkan dari arsip') : t('Arsipkan'), async () => { sh.close(); const was = note.archived; await store.archiveNotes([note.id], !was); if (!was) { ctx.back(); snack(t('Catatan diarsipkan'), { label: t('Urungkan'), icon: 'undo', onClick: () => store.archiveNotes([note.id], false) }); } else snack(t('Dikeluarkan dari arsip')); }),
-        mrow('trash', t('Pindahkan ke Sampah'), async () => { sh.close(); await store.trashNotes([note.id]); ctx.back(); snack(t('1 catatan dipindah ke Sampah'), { label: t('Urungkan'), icon: 'undo', onClick: () => store.restoreNotes([note.id]) }); }, 'danger')),
+        mrow('archive', note.archived ? t('Keluarkan dari arsip') : t('Arsipkan'), async () => { sh.close(); const was = note.archived; const wasPinned = note.pinned; await store.archiveNotes([note.id], !was); if (!was) { ctx.back(); snack(t('Catatan diarsipkan'), { label: t('Urungkan'), icon: 'undo', onClick: async () => { await store.archiveNotes([note.id], false); if (wasPinned) await store.patchNotes([note.id], { pinned: true }); } }); } else snack(t('Dikeluarkan dari arsip')); }),
+        mrow('trash', t('Pindahkan ke Sampah'), async () => { sh.close(); const wasPinned = note.pinned; await store.trashNotes([note.id]); ctx.back(); snack(t('1 catatan dipindah ke Sampah'), { label: t('Urungkan'), icon: 'undo', onClick: async () => { await store.restoreNotes([note.id]); if (wasPinned) await store.patchNotes([note.id], { pinned: true }); } }); }, 'danger')),
       h('div', { class: 'meta', style: 'justify-content:center;font-weight:500' }, t('Dibuat {a} · Diubah {b} · {n} kata', { a: fmtDate(note.createdAt), b: fmtRelative(note.updatedAt), n: store.wordCount(note) })));
     const sh = sheet(null, content);
     void s2;
@@ -578,12 +613,18 @@ export async function render(view, [id], ctx, query = {}) {
     document.removeEventListener('selectionchange', onSel);
     document.removeEventListener('visibilitychange', onHide);
     window.removeEventListener('pagehide', onHide);
-    view.querySelectorAll('audio').forEach(a => a.pause());
+    disposed = true; if (hideUndo && removedAtts.size) hideUndo();
+    stopPlayers(); players.forEach(a => { if (!document.contains(a)) { a.removeAttribute('src'); players.delete(a); } });
     save.cancel();
     if (!store.note(note.id)) return;
     collect();
-    if (isEmptyNote(note) && !note.trashedAt) { await store.deleteForever([note.id]); return; }
+    if (!leaving && isEmptyNote(note) && !note.trashedAt) { await store.deleteForever([note.id]); return; }
     if (dirty) await store.saveNote(note);
+    if (removedAtts.size) {
+      const used = new Set(store.allNotes().flatMap(n => store.noteAttachments(n)));
+      const gone = [...removedAtts].filter(a => !used.has(a));
+      if (gone.length) await store.deleteAttachments(gone);
+    }
   };
 }
 

@@ -41,7 +41,7 @@ export function render(view, args, ctx) {
     const first = new Date(ym.y, ym.m, 1);
     const lead = (first.getDay() + 6) % 7; // Senin = 0
     const days = new Date(ym.y, ym.m + 1, 0).getDate();
-    const todayKey = store.dayKey(today);
+    const todayKey = store.dayKey(new Date()); // dihitung ulang tiap gambar, aman melewati tengah malam
     const stk = store.streak();
     const grid = h('div', { class: 'cal', role: 'grid', 'aria-label': fmtMonth(first) });
     [1, 2, 3, 4, 5, 6, 0].forEach(d => grid.appendChild(h('span', { class: 'wd', 'aria-hidden': 'true' }, fmtWeekdayShort(d).replace('.', ''))));
@@ -76,7 +76,7 @@ export function render(view, args, ctx) {
       const txt = store.isConcealed(j) ? t('Terkunci') : store.noteText(j).replace(/\s+/g, ' ').trim().slice(0, 220);
       panel.appendChild(h('button', { class: 'card', type: 'button', style: 'margin:0', onClick: () => openNote(j, ctx) }, h('h4', {}, key === todayKey ? t('Jurnal hari ini') : noteTitle(j)), h('p', {}, txt || t('Belum ada isi. Ketuk untuk menulis.'))));
     } else if (key <= todayKey) {
-      panel.appendChild(h('button', { class: 'btn p', type: 'button', onClick: () => ctx.navigate('journal/' + key) }, icon('pen', 's'), key === todayKey ? t('Tulis jurnal hari ini') : t('Tulis jurnal untuk hari ini')));
+      panel.appendChild(h('button', { class: 'btn p', type: 'button', onClick: () => ctx.navigate('journal/' + key) }, icon('pen', 's'), key === todayKey ? t('Tulis jurnal hari ini') : t('Tulis jurnal untuk tanggal ini')));
     } else panel.appendChild(h('p', { class: 'small', style: 'margin:0;color:var(--ink2)' }, t('Tanggal ini belum tiba.')));
     const notes = e ? e.notes : [];
     if (notes.length) {

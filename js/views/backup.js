@@ -32,7 +32,7 @@ export function render(view, args, ctx) {
     if (state === 'done' && lastFile) body.appendChild(h('div', { class: 'group', style: 'padding:14px;display:flex;gap:12px;align-items:center' },
       h('span', { class: 'tico k2' }, icon('tick')),
       h('div', { class: 'grow' }, h('b', { style: 'font-size:.875rem;overflow-wrap:anywhere' }, lastFile.name), h('div', { class: 'small muted' }, fmtBytes(lastFile.size) + ' · ' + t('Tersimpan di folder Download'))),
-      btn(t('Bagikan'), 'g sm', () => shareOrDownload(lastFile, lastFile.name, 'Backup Lembar'))));
+      btn(t('Bagikan'), 'g sm', () => shareOrDownload(lastFile, lastFile.name, t('Backup Lembar')))));
     body.append(
       h('div', { class: 'group' },
         h('div', { class: 'row' }, h('span', { class: 'grow' }, t('Sertakan foto, suara & sketsa'), h('span', { class: 'sub' }, t('File lebih besar, tapi lengkap'))), toggle(s.backupMedia !== false, v => store.setSetting('backupMedia', v), t('Sertakan media'))),
@@ -76,7 +76,7 @@ export function render(view, args, ctx) {
 function restoreFlow(view, data, file, ctx) {
   let mode = 'merge', state = 'choose', result = null, prog = 0;
   clear(view);
-  view.appendChild(header(t('Pulihkan backup'), { back: () => ctx.navigate('backup', { replace: true }) }, ctx));
+  view.appendChild(header(t('Pulihkan backup'), { back: () => ctx.refresh() }, ctx));
   const body = h('div', { class: 'wrap stack pad-b' });
   view.appendChild(h('div', { class: 'scroll' }, body));
   const existing = store.allNotes().length;

@@ -17,7 +17,7 @@ export function openDB() {
         }
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => { const db = req.result; db.onversionchange = () => { db.close(); dbPromise = null; }; resolve(db); };
     req.onerror = () => reject(req.error);
     req.onblocked = () => reject(new Error('Database diblokir oleh tab lain'));
   });

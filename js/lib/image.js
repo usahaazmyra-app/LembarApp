@@ -11,6 +11,7 @@ export async function compressImage(file, { max = 1600, quality = 0.82, scan = f
   if (bmp.close) bmp.close();
   if (scan) enhanceDocument(ctx, w, hgt);
   const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', quality));
+  if (!blob) throw new Error('encode-failed');
   return { blob, w, h: hgt, original: file.size };
 }
 

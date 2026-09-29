@@ -58,12 +58,12 @@ function htmlToMd(html) {
         case 'H2': s += '\n### ' + inner + '\n'; break;
         case 'H3': s += '\n#### ' + inner + '\n'; break;
         case 'LI': s += (ctx.ol ? (ctx.i = (ctx.i || 0) + 1) + '. ' : '- ') + inner.trim() + '\n'; break;
-        case 'UL': s += '\n' + walk(c, {}) ; break;
-        case 'OL': s += '\n' + walk(c, { ol: true }); break;
+        case 'UL': s += '\n' + walk(c, {}) + '\n'; break;
+        case 'OL': s += '\n' + walk(c, { ol: true }) + '\n'; break;
         case 'BLOCKQUOTE': s += '\n> ' + inner.trim().replace(/\n/g, '\n> ') + '\n'; break;
         case 'PRE': s += '\n```\n' + c.textContent + '\n```\n'; break;
-        case 'BR': s += '\n'; break;
-        case 'DIV': case 'P': s += '\n' + inner; break;
+        case 'BR': s += '  \n'; break;
+        case 'DIV': case 'P': s += '\n\n' + inner; break;
         case 'A': s += '[[' + inner + ']]'; break;
         default: s += inner;
       }
@@ -161,7 +161,7 @@ export function openShare(n) {
     if (fmt === 'card') { const b = await renderCard(n, color); if (blobUrl) URL.revokeObjectURL(blobUrl); blobUrl = URL.createObjectURL(b); preview.src = blobUrl; }
   };
   const seg = h('div', { class: 'seg' }, [['text', t('Teks')], ['card', t('Gambar kartu')], ['pdf', 'PDF']].map(([k, l]) => h('button', { type: 'button', 'data-k': k, onClick: () => { fmt = k; draw(); } }, l)));
-  const safeName = (noteTitle(n).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 40) || 'catatan').toLowerCase();
+  const safeName = (noteTitle(n).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 40) || t('catatan')).toLowerCase();
   const act = (ic, label, fn) => h('button', { class: 'qa', type: 'button', onClick: fn }, h('span', { style: 'width:52px;height:52px;border-radius:18px;background:var(--paper);border:1px solid var(--line);display:flex;align-items:center;justify-content:center' }, icon(ic)), label);
   const send = async () => {
     if (fmt === 'text') {

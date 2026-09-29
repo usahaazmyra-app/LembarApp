@@ -23,9 +23,9 @@ export async function ensureNotifyPermission() {
   return Notification.permission;
 }
 
-async function notify(n) {
+async function notify(n, at) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const body = store.isConcealed(n) ? t('Catatan terkunci') : (store.noteText(n).replace(/\s+/g, ' ').slice(0, 120) || fmtWhen(n.reminder.at));
+  const body = store.isConcealed(n) ? t('Catatan terkunci') : (store.noteText(n).replace(/\s+/g, ' ').slice(0, 120) || fmtWhen(at));
   const opts = { body, tag: 'lembar-' + n.id, renotify: true, icon: './icons/icon-192.png', badge: './icons/maskable-192.png', data: { id: n.id }, vibrate: [120, 60, 120], requireInteraction: true };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
@@ -40,41 +40,61 @@ async function check() {
   for (const n of store.reminders()) {
     const r = n.reminder;
     if (!r || r.done || r.paused || r.at > now) continue;
-    if (!r.fired) { r.fired = true; await store.saveNote(n, { touch: false }); notify(n); }
-    const key = n.id + ':' + r.at;
-    if (!shown.has(key)) { shown.add(key); queue.push(n.id); }
+    const at = r.at;
+    const repeating = r.repeat && r.repeat !== 'none';
+    if (repeating) {
+      // pengingat berulang langsung dijadwalkan ke kejadian berikutnya,
+      // jadi tetap berbunyi walau dialognya ditutup tanpa memilih apa pun
+      if (r.repeat === 'monthly' && !r.dom) {
+        const ref = new Date(r.resume || at);
+        const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
+        r.dom = ref.getDate() === lastDay ? 31 : ref.getDate(); // akhir bulan tetap akhir bulan
+      }
+      r.at = r.resume && r.resume > now ? r.resume : store.nextOccurrence({ ...r, at: r.resume || at }, now);
+      delete r.resume; r.fired = false;
+      await store.saveNote(n, { touch: false });
+      notify(n, at);
+    } else if (!r.fired) { r.fired = true; await store.saveNote(n, { touch: false }); notify(n, at); }
+    const key = n.id + ':' + at;
+    if (!shown.has(key)) { shown.add(key); queue.push({ id: n.id, at }); }
   }
   pump();
 }
 
 function pump() {
   if (showing || !queue.length || document.hidden) return;
-  const n = store.note(queue.shift());
-  if (!n || !n.reminder || n.reminder.done) return pump();
+  const q = queue.shift();
+  const n = store.note(q.id);
+  if (!n || !n.reminder || n.reminder.done || n.trashedAt) return pump();
   showing = true;
-  ring(n).finally(() => { showing = false; setTimeout(pump, 300); });
+  ring(n, q.at).finally(() => { showing = false; setTimeout(pump, 300); });
 }
 
 export async function markDone(n) {
   const r = n.reminder;
+  if (!r) return;
   if (r.repeat && r.repeat !== 'none') {
-    r.at = store.nextOccurrence({ ...r, at: r.base || r.at });
-    delete r.base; r.fired = false;
+    // kejadian berikutnya sudah dijadwalkan saat berbunyi; batalkan tunda bila ada
+    if (r.resume) { r.at = r.resume; delete r.resume; }
+    if (r.at <= Date.now()) r.at = store.nextOccurrence(r);
+    r.fired = false;
   } else { r.done = true; r.doneAt = Date.now(); r.fired = false; }
   await store.saveNote(n, { touch: false });
 }
 export async function snooze(n, ms) {
   const r = n.reminder;
-  if (!r.base) r.base = r.at;
+  if (!r) return;
+  // untuk pengingat berulang, simpan jadwal berikutnya agar seri tidak hilang
+  if (r.repeat && r.repeat !== 'none' && !r.resume) r.resume = r.at;
   r.at = typeof ms === 'number' ? Date.now() + ms : ms();
   r.fired = false;
   await store.saveNote(n, { touch: false });
 }
 
-function ring(n) {
+function ring(n, at = n.reminder.at) {
   vibrate([200, 80, 200]);
   return new Promise(resolve => {
-    const late = Date.now() - n.reminder.at > 5 * 60000;
+    const late = Date.now() - at > 5 * 60000;
     const concealed = store.isConcealed(n);
     const preview = [];
     if (!concealed) {
@@ -87,7 +107,7 @@ function ring(n) {
     const snoozeBtn = (label, ms) => h('button', { class: 'btn g sm', type: 'button', style: 'flex:1', onClick: async () => { await snooze(n, ms); d.close(); snack(t('Diingatkan lagi {w}', { w: fmtWhen(n.reminder.at) })); resolve(); } }, label);
     d = dialog({
       title: noteTitle(n), icon: 'bell',
-      message: (late ? t('Terlewat · ') : '') + fmtWhen(n.reminder.base || n.reminder.at) + (n.reminder.repeat && n.reminder.repeat !== 'none' ? ' · ' + t('berulang') : ''),
+      message: (late ? t('Terlewat · ') : '') + fmtWhen(at) + (n.reminder.repeat && n.reminder.repeat !== 'none' ? ' · ' + t('berulang') : ''),
       content: h('div', { class: 'stack', style: 'gap:12px' },
         preview.length ? h('div', { class: 'mini', style: 'font-size:.9rem' }, preview) : null,
         st.total ? h('span', { class: 'meta' }, t('{d} dari {n} selesai', { d: st.done, n: st.total })) : null,

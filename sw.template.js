@@ -5,7 +5,8 @@ const FONT_CACHE = 'lembar-fonts-v1';
 const ASSETS = __ASSETS__;
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)));
+  // cache: 'reload' memastikan file diambil dari server, bukan dari cache HTTP browser yang lama
+  event.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', event => {

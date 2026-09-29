@@ -63,7 +63,7 @@ export function pickTags(initial = [], { title = t('Tag') } = {}) {
     const s = sheet(title, h('div', { class: 'stack' },
       h('div', { class: 'row-flex' }, input, btn(t('Tambah'), 'g sm', add)),
       list,
-      btn(t('Simpan'), 'p block', () => { decided = true; s.close(); resolve([...sel]); })),
+      btn(t('Simpan'), 'p block', () => { add(); decided = true; s.close(); resolve([...sel]); })),
       { onClose: () => { if (!decided) resolve(undefined); } });
   });
 }
@@ -110,18 +110,27 @@ export function pickReminder(current) {
     const drawRep = () => {
       seg.replaceChildren(...reps.map(([k, l]) => h('button', { type: 'button', class: repeat === k ? 'on' : '', onClick: () => { repeat = k; drawRep(); } }, l)));
       dayRow.hidden = repeat !== 'weekly';
-      dayRow.replaceChildren(...[1, 2, 3, 4, 5, 6, 0].map(d => h('button', { type: 'button', 'aria-label': fmtWeekdayShort(d), style: `width:40px;height:40px;border-radius:20px;border:1px solid var(--line);font-weight:700;font-size:.8rem;${days.includes(d) ? 'background:var(--ink);color:var(--paper);border-color:var(--ink)' : 'background:var(--paper)'}`, onClick: () => { days = days.includes(d) ? days.filter(x => x !== d) : [...days, d]; drawRep(); } }, fmtWeekdayShort(d).slice(0, 1).toUpperCase())));
+      dayRow.replaceChildren(...[1, 2, 3, 4, 5, 6, 0].map(d => h('button', { type: 'button', 'aria-label': fmtWeekdayShort(d), style: `width:40px;height:40px;border-radius:20px;border:1px solid var(--line);font-weight:700;font-size:.7rem;padding:0;${days.includes(d) ? 'background:var(--ink);color:var(--paper);border-color:var(--ink)' : 'background:var(--paper)'}`, onClick: () => { days = days.includes(d) ? days.filter(x => x !== d) : [...days, d]; drawRep(); } }, fmtWeekdayShort(d).replace('.', '').slice(0, 3))));
     };
     drawRep();
     const save = () => {
       const [y, m, d] = dateIn.value.split('-').map(Number);
       const [hh, mm] = timeIn.value.split(':').map(Number);
       let ts = new Date(y, m - 1, d, hh, mm).getTime();
-      if (!isFinite(ts)) return;
+      if (!dateIn.value || !timeIn.value || !isFinite(ts)) { (dateIn.value ? timeIn : dateIn).focus(); import('./ui.js').then(u => u.snack(t('Isi tanggal dan waktu dulu'))); return; }
       if (ts < Date.now() - 30000 && repeat === 'none') { dateIn.focus(); import('./ui.js').then(u => u.snack(t('Pilih waktu yang belum lewat'))); return; }
       if (repeat === 'weekly' && !days.length) days = [new Date(ts).getDay()];
+      // pengingat berulang: mulai dari kejadian pertama yang sesuai hari terpilih dan belum lewat
+      if (repeat === 'weekly') {
+        const d0 = new Date(ts);
+        for (let i = 0; i < 8; i++) { const c = new Date(d0); c.setDate(d0.getDate() + i); if (days.includes(c.getDay()) && c.getTime() >= Date.now() - 30000) { ts = c.getTime(); break; } }
+      } else if (repeat !== 'none' && ts < Date.now() - 30000) {
+        ts = store.nextOccurrence({ at: ts, repeat, dom: new Date(ts).getDate() }, Date.now());
+      }
       decided = true; s.close();
-      resolve({ at: ts, repeat, days: repeat === 'weekly' ? days : [], done: false, fired: false });
+      const out = { at: ts, repeat, days: repeat === 'weekly' ? days : [], done: false, fired: false };
+      if (repeat === 'monthly') out.dom = new Date(y, m - 1, d).getDate();
+      resolve(out);
     };
     const s = sheet(t('Ingatkan saya'), h('div', { class: 'stack' },
       qwrap, custom,

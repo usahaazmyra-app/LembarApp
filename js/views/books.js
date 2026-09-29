@@ -4,10 +4,11 @@ import { h, clear, iconBtn, snack, sheet, confirm, toggle } from '../ui.js';
 import { icon } from '../icons.js';
 import { t } from '../i18n.js';
 import { collection } from '../collection.js';
-import { emptyState, bookColorVar } from '../components.js';
+import { emptyState, bookColorVar, noteTitle } from '../components.js';
 import { requestUnlock, setupPin } from './lock.js';
 import { openCreateMenu } from '../app.js';
 
+const ICON_NAMES = { book: 'Buku', work: 'Kerja', school: 'Sekolah', heart: 'Hati', pen: 'Pena', food: 'Makanan', map: 'Peta', idea: 'Ide', star: 'Bintang', home: 'Rumah' };
 const liveIn = id => store.liveNotes().filter(n => n.bookId === id);
 
 export function render(view, args, ctx) {
@@ -86,7 +87,7 @@ export function renderBook(view, [id], ctx) {
   const getNotes = () => {
     let list = liveIn(b.id);
     if (tagFilter) list = list.filter(n => store.noteTags(n).includes(tagFilter));
-    if (sort === 'title') return list.sort((x, y) => (y.pinned - x.pinned) || (x.title || '').localeCompare(y.title || ''));
+    if (sort === 'title') return list.sort((x, y) => (y.pinned - x.pinned) || noteTitle(x).localeCompare(noteTitle(y), undefined, { sensitivity: 'base' }));
     if (sort === 'created') return list.sort((x, y) => (y.pinned - x.pinned) || (y.createdAt - x.createdAt));
     return store.sortNotes(list);
   };
@@ -115,15 +116,21 @@ export function renderBook(view, [id], ctx) {
       h('button', { class: 'mrow danger', type: 'button', onClick: async () => {
         s.close();
         const n = liveIn(b.id).length;
-        const ok = await confirm({ title: t('Hapus buku “{n}”?', { n: b.name }), message: n ? t('{n} catatan di dalamnya tidak ikut terhapus. Catatan itu akan dipindah ke “Tanpa buku”.', { n }) : t('Buku ini kosong.'), ok: t('Hapus buku'), danger: true, icon: 'trash' });
+        const ok = await confirm({ title: t('Hapus buku “{n}”?', { n: b.name }), message: n ? (b.locked ? t('{n} catatan di dalamnya tidak ikut terhapus. Catatan itu akan dipindah ke “Tanpa buku” dan tetap terkunci.', { n }) : t('{n} catatan di dalamnya tidak ikut terhapus. Catatan itu akan dipindah ke “Tanpa buku”.', { n })) : t('Buku ini kosong.'), ok: t('Hapus buku'), danger: true, icon: 'trash' });
         if (!ok) return;
-        await store.deleteBook(b.id); snack(t('Buku dihapus')); ctx.navigate('books', { replace: true });
+        await store.deleteBook(b.id); snack(t('Buku dihapus')); ctx.back('books');
       } }, icon('trash'), h('span', { class: 'grow' }, t('Hapus buku')))));
   }
 }
 
 export function renderBookForm(view, [id], ctx) {
   const existing = id ? store.book(id) : null;
+  if (id && !existing) { ctx.navigate('books', { replace: true }); return; }
+  if (existing && existing.locked && !store.session.unlocked) {
+    view.appendChild(h('div', { class: 'hdr' }, iconBtn('back', t('Kembali'), () => ctx.back('books'))));
+    requestUnlock({ title: t('Buku ini terkunci') }).then(ok => { if (ok) { clear(view); renderBookForm(view, [id], ctx); } else ctx.back('books'); });
+    return;
+  }
   const st = { name: existing ? existing.name : '', color: existing ? existing.color : 'k7', icon: existing ? existing.icon : 'book', locked: existing ? !!existing.locked : false };
   const nameIn = h('input', { type: 'text', value: st.name, placeholder: t('Misal: Liburan Bali'), maxlength: 40 });
   const preview = h('div', { class: 'cover', style: 'width:150px;height:190px;border-radius:10px 24px 24px 10px;padding:18px 16px 16px 26px;align-self:center;box-shadow:0 4px 0 rgba(43,42,40,.08),0 16px 30px rgba(43,42,40,.14)' });
@@ -136,7 +143,7 @@ export function renderBookForm(view, [id], ctx) {
   const colors = h('div', { class: 'swatches', style: 'justify-content:space-between' });
   const drawColors = () => colors.replaceChildren(...store.CARD_COLORS.filter(c => c[0]).map(([k, n]) => h('button', { class: 'sw' + (st.color === k ? ' on' : ''), type: 'button', style: `background:var(--${k});width:34px;height:34px;border-radius:17px`, 'aria-label': t(n), onClick: () => { st.color = k; drawColors(); drawPreview(); } })));
   const icons = h('div', { class: 'icons-pick' });
-  const drawIcons = () => icons.replaceChildren(...store.BOOK_ICONS.map(ic => h('button', { class: st.icon === ic ? 'on' : '', type: 'button', 'aria-label': ic, 'aria-pressed': st.icon === ic ? 'true' : 'false', onClick: () => { st.icon = ic; drawIcons(); drawPreview(); } }, icon(ic))));
+  const drawIcons = () => icons.replaceChildren(...store.BOOK_ICONS.map(ic => h('button', { class: st.icon === ic ? 'on' : '', type: 'button', 'aria-label': t(ICON_NAMES[ic] || 'Ikon'), 'aria-pressed': st.icon === ic ? 'true' : 'false', onClick: () => { st.icon = ic; drawIcons(); drawPreview(); } }, icon(ic))));
   const saveBtn = h('button', { class: 'btn p sm', type: 'button', onClick: async () => {
     const name = nameIn.value.trim();
     if (!name) { nameIn.focus(); nameIn.classList.add('err'); return; }
@@ -144,7 +151,7 @@ export function renderBookForm(view, [id], ctx) {
     const b = await store.saveBook({ ...(existing || {}), name, color: st.color, icon: st.icon, locked: st.locked });
     if (st.locked) store.session.unlocked = true;
     snack(existing ? t('Buku diperbarui') : t('Buku “{n}” dibuat', { n: name }));
-    ctx.navigate('book/' + b.id, { replace: true });
+    if (existing) ctx.back('book/' + b.id); else ctx.navigate('book/' + b.id, { replace: true });
   } }, t('Simpan'));
   view.appendChild(h('div', { class: 'hdr' }, iconBtn('close', t('Batal'), () => ctx.back('books')), h('h1', { class: 'h2' }, existing ? t('Ubah buku') : t('Buku baru')), saveBtn));
   view.appendChild(h('div', { class: 'scroll' }, h('div', { class: 'wrap stack pad-b' },

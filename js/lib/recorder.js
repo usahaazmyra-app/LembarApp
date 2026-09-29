@@ -18,12 +18,17 @@ export function recordAudio() {
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
     catch (e) { snack(e.name === 'NotAllowedError' ? t('Izin mikrofon ditolak. Aktifkan di pengaturan HP.') : t('Mikrofon tidak bisa dipakai')); return resolve(null); }
     const mime = pickMime();
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    let rec;
+    try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+    catch (e) { stream.getTracks().forEach(tr => tr.stop()); snack(t('Mikrofon tidak bisa dipakai')); return resolve(null); }
     const chunks = []; const peaks = [];
     const actx = new (window.AudioContext || window.webkitAudioContext)();
     const src = actx.createMediaStreamSource(stream);
     const an = actx.createAnalyser(); an.fftSize = 1024; src.connect(an);
     const buf = new Uint8Array(an.fftSize);
+    // durasi dihitung dari jam, bukan dari animasi, supaya tetap benar saat layar mati
+    const startAt = Date.now(); let pausedTotal = 0, pauseStart = 0;
+    const elapsedNow = () => (paused ? pauseStart : Date.now()) - startAt - pausedTotal;
     let elapsed = 0, lastTick = performance.now(), paused = false, cancelled = false, raf, peakAcc = 0, peakT = 0;
     const timeEl = h('span', { class: 'muted', style: 'margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700' }, '0:00');
     const statusEl = h('span', {}, t('Merekam'));
@@ -34,31 +39,31 @@ export function recordAudio() {
     const loop = (now) => {
       const dt = now - lastTick; lastTick = now;
       if (!paused) {
-        elapsed += dt;
+        elapsed = elapsedNow();
         an.getByteTimeDomainData(buf);
         let m = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i] - 128) / 128; if (v > m) m = v; }
         const lvl = Math.min(1, m * 1.8);
         peakAcc = Math.max(peakAcc, lvl); peakT += dt;
         if (peakT >= 100) { peaks.push(+peakAcc.toFixed(2)); live.push(peakAcc); live.shift(); peakAcc = 0; peakT = 0; drawWave(); }
         timeEl.textContent = fmtDur(elapsed / 1000);
-        if (elapsed > 60 * 60 * 1000) stop();
       }
       raf = requestAnimationFrame(loop);
     };
+    const capTimer = setInterval(() => { if (elapsedNow() > 60 * 60 * 1000) stop(); }, 1000);
     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    const cleanup = () => { cancelAnimationFrame(raf); stream.getTracks().forEach(tr => tr.stop()); actx.close().catch(() => {}); };
+    const cleanup = () => { clearInterval(capTimer); cancelAnimationFrame(raf); stream.getTracks().forEach(tr => tr.stop()); actx.close().catch(() => {}); };
     rec.onstop = async () => {
       cleanup();
       if (cancelled || !chunks.length) return resolve(null);
       const blob = new Blob(chunks, { type: rec.mimeType || mime || 'audio/webm' });
       const att = await store.putAttachment(blob);
-      resolve({ att, dur: Math.round(elapsed / 1000), peaks: compact(peaks) });
+      resolve({ att, dur: Math.max(1, Math.round(elapsedNow() / 1000)), peaks: compact(peaks) });
     };
     const stop = () => { if (rec.state !== 'inactive') { rec.stop(); } s.close(); };
     const pauseBtn = h('button', { class: 'ib soft', type: 'button', 'aria-label': t('Jeda') }, icon('pause'));
     pauseBtn.addEventListener('click', () => {
-      if (!paused) { rec.pause(); paused = true; statusEl.textContent = t('Dijeda'); dot.style.animation = 'none'; dot.style.opacity = '.4'; pauseBtn.replaceChildren(icon('play')); pauseBtn.setAttribute('aria-label', t('Lanjutkan')); }
-      else { rec.resume(); paused = false; statusEl.textContent = t('Merekam'); dot.style.animation = ''; dot.style.opacity = ''; pauseBtn.replaceChildren(icon('pause')); pauseBtn.setAttribute('aria-label', t('Jeda')); }
+      if (!paused) { rec.pause(); pauseStart = Date.now(); paused = true; statusEl.textContent = t('Dijeda'); dot.style.animation = 'none'; dot.style.opacity = '.4'; pauseBtn.replaceChildren(icon('play')); pauseBtn.setAttribute('aria-label', t('Lanjutkan')); }
+      else { rec.resume(); pausedTotal += Date.now() - pauseStart; paused = false; statusEl.textContent = t('Merekam'); dot.style.animation = ''; dot.style.opacity = ''; pauseBtn.replaceChildren(icon('pause')); pauseBtn.setAttribute('aria-label', t('Jeda')); }
     });
     drawWave();
     const s = sheet(null, h('div', { class: 'stack' },
@@ -68,7 +73,7 @@ export function recordAudio() {
         h('button', { class: 'btn t sm', type: 'button', onClick: () => { cancelled = true; stop(); } }, t('Batal')),
         h('button', { class: 'rec-stop', type: 'button', 'aria-label': t('Selesai merekam'), onClick: stop }, h('span')),
         pauseBtn)), { dismissable: false, onClose: () => { if (rec.state !== 'inactive') { cancelled = cancelled || false; rec.stop(); } } });
-    rec.start(1000);
+    try { rec.start(1000); } catch (e) { cancelled = true; s.close(); cleanup(); snack(t('Mikrofon tidak bisa dipakai')); return resolve(null); }
     raf = requestAnimationFrame(loop);
   });
 }

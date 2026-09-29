@@ -489,3 +489,4 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 .tpl-new{border:1.5px dashed var(--line)!important;background:transparent!important;justify-content:center;align-items:center;text-align:center;min-height:150px;cursor:pointer}
 .tpl-new:active{background:var(--accent-soft)!important}
 .tpl-plus{width:44px;height:44px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.sw-row{touch-action:pan-y}

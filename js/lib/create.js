@@ -37,7 +37,7 @@ export async function createNoteOfType(type, query = {}) {
 export async function createFromTemplate(id, bookId = null) {
   const b = builtinTemplates().find(x => x.id === id);
   if (b) {
-    if (b.type === 'journal') return createNoteOfType('journal', {});
+    if (b.type === 'journal') return store.journalFor(store.dayKey()) || createNoteOfType('journal', {});
     return store.createNote({ type: b.type, bookId, title: '', blocks: b.blocks() });
   }
   const c = store.templates().find(x => x.id === id);
@@ -47,12 +47,17 @@ export async function createFromTemplate(id, bookId = null) {
 
 export async function imageBlocks(files, { scan = false } = {}) {
   const blocks = [];
+  let failed = 0;
   for (const f of files) {
-    if (!f.type.startsWith('image/')) continue;
-    const { blob, w, h, original } = await compressImage(f, { scan });
-    const att = await store.putAttachment(blob);
-    blocks.push({ id: store.uid(), t: 'image', att, w, h, size: blob.size, original });
+    if (f.type && !f.type.startsWith('image/')) { failed++; continue; }
+    try {
+      const { blob, w, h, original } = await compressImage(f, { scan });
+      const att = await store.putAttachment(blob);
+      blocks.push({ id: store.uid(), t: 'image', att, w, h, size: blob.size, original });
+    } catch (e) { console.warn('image', e); failed++; }
   }
+  if (!blocks.length && failed) throw new Error('image-unreadable');
+  if (failed) snack(t('{n} foto tidak bisa dibaca dan dilewati', { n: failed }));
   return blocks;
 }
 
@@ -69,7 +74,7 @@ export async function saveNoteAsTemplate(note) {
   const blocks = JSON.parse(JSON.stringify(note.blocks.filter(b => !b.att)));
   blocks.forEach(b => { if (b.items) b.items.forEach(i => { i.done = false; }); });
   if (!blocks.length) blocks.push(tb());
-  const tp = await store.saveTemplate({ name, desc: t('Template buatanmu'), type: note.type === 'journal' ? 'text' : note.type, color: note.color || 'k8', blocks, title: '' });
+  const tp = await store.saveTemplate({ name, desc: t('Template buatanmu'), type: ['journal', 'photo', 'voice', 'sketch'].includes(note.type) ? 'text' : note.type, color: note.color || 'k8', blocks, title: '' });
   snack(t('Template “{n}” tersimpan', { n: name }));
   return tp;
 }

@@ -42,6 +42,7 @@ function snippet(n, len = 180) {
 }
 export function noteTitle(n) {
   if (n.title && n.title.trim()) return n.title.trim();
+  if (store.isConcealed(n)) return t('Catatan terkunci');
   const first = store.noteText(n).split('\n').find(l => l.trim());
   if (first) return first.trim().slice(0, 60);
   return t('Tanpa judul');

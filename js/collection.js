@@ -1,6 +1,6 @@
 // Lembar · daftar catatan: grid/daftar, swipe, pilih banyak
 import * as store from './store.js';
-import { h, clear, snack, swipeable, onLongPress, confirm, vibrate } from './ui.js';
+import { h, clear, snack, swipeable, onLongPress, confirm, vibrate, backHandler } from './ui.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { noteCard, noteRow } from './components.js';
@@ -16,10 +16,12 @@ export function openNote(n, ctx) {
 export function collection(host, { root, ctx, getNotes, view = () => 'grid', mode = 'live', empty, onSelect }) {
   const sel = new Set();
   let selecting = false;
-  let selHdr = null, selBar = null;
+  let selHdr = null, selBar = null, selBack = null;
 
-  const exitSel = () => { selecting = false; sel.clear(); selHdr && selHdr.remove(); selBar && selBar.remove(); selHdr = selBar = null; root.classList.remove('selecting'); document.body.classList.remove('selecting'); draw(); onSelect && onSelect(false); };
-  const enterSel = (id) => { if (!selecting) { selecting = true; root.classList.add('selecting'); document.body.classList.add('selecting'); onSelect && onSelect(true); } if (id) sel.add(id); drawBars(); draw(); };
+  // arsip/sampah melepas sematan; Urungkan mengembalikannya
+  const undoWith = (ids, fn) => { const pinned = ids.filter(id => store.note(id)?.pinned); return async () => { await fn(); if (pinned.length) await store.patchNotes(pinned, { pinned: true }); }; };
+  const exitSel = () => { if (selBack) { const b = selBack; selBack = null; b.release(); } selecting = false; sel.clear(); selHdr && selHdr.remove(); selBar && selBar.remove(); selHdr = selBar = null; root.classList.remove('selecting'); document.body.classList.remove('selecting'); draw(); onSelect && onSelect(false); };
+  const enterSel = (id) => { if (!selecting) { selBack = backHandler(() => { selBack = null; exitSel(); }); selecting = true; root.classList.add('selecting'); document.body.classList.add('selecting'); onSelect && onSelect(true); } if (id) sel.add(id); drawBars(); draw(); };
 
   function act(label, ic, fn) { return h('button', { type: 'button', onClick: fn }, icon(ic), label); }
   function drawBars() {
@@ -42,8 +44,8 @@ export function collection(host, { root, ctx, getNotes, view = () => 'grid', mod
       act(t('Pindah'), 'folder', need(async () => { const b = await pickBook(undefined); if (b === undefined) return; await store.patchNotes(ids(), { bookId: b }); snack(t('{n} catatan dipindah', { n: sel.size })); exitSel(); })),
       act(t('Warna'), 'drop', need(async () => { const c = await pickColor(''); if (c === undefined) return; await store.patchNotes(ids(), { color: c }); exitSel(); })),
       act(t('Tag'), 'label', need(async () => { const tags = await pickTags([], { title: t('Tambah tag ke {n} catatan', { n: sel.size }) }); if (!tags) return; await store.patchNotes(ids(), n => ({ tags: [...new Set([...(n.tags || []), ...tags])] })); exitSel(); })),
-      act(t('Arsip'), 'archive', need(async () => { const i = ids(); await store.archiveNotes(i); exitSel(); snack(t('{n} catatan diarsipkan', { n: i.length }), { label: t('Urungkan'), icon: 'undo', onClick: () => store.archiveNotes(i, false) }); })),
-      act(t('Hapus'), 'trash', need(async () => { const i = ids(); await store.trashNotes(i); exitSel(); snack(t('{n} catatan dipindah ke Sampah', { n: i.length }), { label: t('Urungkan'), icon: 'undo', onClick: () => store.restoreNotes(i) }); })));
+      act(t('Arsip'), 'archive', need(async () => { const i = ids(); const undo = undoWith(i, () => store.archiveNotes(i, false)); await store.archiveNotes(i); exitSel(); snack(t('{n} catatan diarsipkan', { n: i.length }), { label: t('Urungkan'), icon: 'undo', onClick: undo }); })),
+      act(t('Hapus'), 'trash', need(async () => { const i = ids(); const undo = undoWith(i, () => store.restoreNotes(i)); await store.trashNotes(i); exitSel(); snack(t('{n} catatan dipindah ke Sampah', { n: i.length }), { label: t('Urungkan'), icon: 'undo', onClick: undo }); })));
     else if (mode === 'archive') selBar.replaceChildren(
       act(t('Keluarkan'), 'upload', need(async () => { const i = ids(); await store.archiveNotes(i, false); exitSel(); snack(t('{n} catatan dikeluarkan dari arsip', { n: i.length })); })),
       act(t('Hapus'), 'trash', need(async () => { const i = ids(); await store.trashNotes(i); exitSel(); snack(t('{n} catatan dipindah ke Sampah', { n: i.length }), { label: t('Urungkan'), icon: 'undo', onClick: () => store.restoreNotes(i) }); })));
@@ -84,8 +86,8 @@ export function collection(host, { root, ctx, getNotes, view = () => 'grid', mod
         if (mode === 'live' && !selecting) {
           swipeable(wrap, {
             rightLabel: t('Arsipkan'), leftLabel: t('Hapus'),
-            onRight: async () => { await store.archiveNotes([n.id]); snack(t('Catatan diarsipkan'), { label: t('Urungkan'), icon: 'undo', onClick: () => store.archiveNotes([n.id], false) }); },
-            onLeft: async () => { await store.trashNotes([n.id]); snack(t('1 catatan dipindah ke Sampah'), { label: t('Urungkan'), icon: 'undo', onClick: () => store.restoreNotes([n.id]) }); },
+            onRight: async () => { const undo = undoWith([n.id], () => store.archiveNotes([n.id], false)); await store.archiveNotes([n.id]); snack(t('Catatan diarsipkan'), { label: t('Urungkan'), icon: 'undo', onClick: undo }); },
+            onLeft: async () => { const undo = undoWith([n.id], () => store.restoreNotes([n.id])); await store.trashNotes([n.id]); snack(t('1 catatan dipindah ke Sampah'), { label: t('Urungkan'), icon: 'undo', onClick: undo }); },
           });
         }
         list.appendChild(wrap);
@@ -96,6 +98,8 @@ export function collection(host, { root, ctx, getNotes, view = () => 'grid', mod
   const trashSub = n => { const left = Math.max(0, 30 - Math.floor((Date.now() - n.trashedAt) / store.DAY)); return t('Terhapus permanen dalam {n} hari', { n: left }); };
   const archSub = null;
 
+  // halaman dirender ulang saat mode pilih: lepaskan entri Kembali-nya
+  ctx && ctx.onDispose && ctx.onDispose(() => { if (selBack) { const bk = selBack; selBack = null; bk.release(); } document.body.classList.remove('selecting'); });
   draw();
   return { refresh() { if (selecting) { for (const id of [...sel]) if (!getNotes().some(n => n.id === id)) sel.delete(id); drawBars(); } draw(); }, exitSel, get selecting() { return selecting; } };
 }

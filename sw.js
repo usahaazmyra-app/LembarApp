@@ -1,6 +1,6 @@
 // Lembar · service worker (offline penuh)
 // File ini dibuat otomatis oleh tools-build-sw.py dari sw.template.js.
-const VERSION = 'lembar-b6e8c87f46';
+const VERSION = 'lembar-8d059c5dc6';
 const FONT_CACHE = 'lembar-fonts-v1';
 const ASSETS = [
   "./",
@@ -11,37 +11,24 @@ const ASSETS = [
   "js/boot.js",
   "js/collection.js",
   "js/components.js",
-  "js/crypto.js",
-  "js/data.js",
   "js/db.js",
   "js/i18n.js",
   "js/icons.js",
-  "js/lang-en.js",
-  "js/main.js",
-  "js/media.js",
   "js/pickers.js",
-  "js/reminders.js",
-  "js/router.js",
-  "js/sanitize.js",
-  "js/share.js",
   "js/store.js",
-  "js/theme.js",
   "js/ui.js",
   "js/views/archive.js",
   "js/views/backup.js",
   "js/views/books.js",
   "js/views/calendar.js",
-  "js/views/cards.js",
   "js/views/editor.js",
   "js/views/help.js",
   "js/views/home.js",
   "js/views/lock.js",
   "js/views/onboarding.js",
-  "js/views/pickers.js",
   "js/views/reminders.js",
   "js/views/search.js",
   "js/views/settings.js",
-  "js/views/shell.js",
   "js/views/sketch.js",
   "js/views/stats.js",
   "js/views/tags.js",
@@ -66,7 +53,8 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)));
+  // cache: 'reload' memastikan file diambil dari server, bukan dari cache HTTP browser yang lama
+  event.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', event => {

@@ -64,22 +64,27 @@ export function render(view, args, ctx) {
         h('p', { style: 'margin:0;font-family:var(--serif);font-size:1rem;line-height:1.5;color:var(--ink2)' }, t('Pratinjau: tulisan catatanmu akan terlihat seperti ini.'))));
   }
   function installRow() {
+    const upd = window.__lembarUpdate;
+    const updRow = upd ? h('div', { class: 'group' }, h('button', { class: 'row', type: 'button', onClick: () => upd.postMessage('skipWaiting') },
+      icon('refresh'), h('span', { class: 'grow' }, t('Versi baru Lembar tersedia'), h('span', { class: 'sub' }, t('Ketuk untuk memuat ulang dan memakai versi terbaru'))), icon('right', 's'))) : null;
     const ev = window.__lembarInstall;
-    if (!ev) return null;
-    return h('div', { class: 'group' }, h('button', { class: 'row', type: 'button', onClick: async () => { ev.prompt(); const r = await ev.userChoice; if (r.outcome === 'accepted') { window.__lembarInstall = null; draw(); } } },
-      icon('download'), h('span', { class: 'grow' }, t('Pasang Lembar di layar utama'), h('span', { class: 'sub' }, t('Buka seperti aplikasi biasa, tanpa bilah browser'))), icon('right', 's')));
+    if (!ev) return updRow;
+    return h('div', { class: 'stack' }, updRow, h('div', { class: 'group' }, h('button', { class: 'row', type: 'button', onClick: async () => { window.__lembarInstall = null; try { ev.prompt(); await ev.userChoice; } catch (e) { /* noop */ } draw(); } },
+      icon('download'), h('span', { class: 'grow' }, t('Pasang Lembar di layar utama'), h('span', { class: 'sub' }, t('Buka seperti aplikasi biasa, tanpa bilah browser'))), icon('right', 's'))));
   }
   draw();
   ctx.watch(['settings'], draw);
 }
 
 export function renderLanguage(view, args, ctx) {
-  view.appendChild(header(t('Bahasa'), { backTo: 'settings' }, ctx));
+  const hdrHost = h('div', { style: 'display:contents' });
+  view.appendChild(hdrHost);
   const body = h('div', { class: 'wrap stack pad-b' });
   view.appendChild(h('div', { class: 'scroll' }, body));
   let preview = getLang();
   const draw = () => {
     const s = store.settings();
+    hdrHost.replaceChildren(header(t('Bahasa'), { backTo: 'settings' }, ctx));
     clear(body);
     const active = s.followSystemLang ? detectLang() : (s.lang || 'id');
     const prev = getLang(); setLang(preview);
@@ -91,16 +96,16 @@ export function renderLanguage(view, args, ctx) {
     setLang(prev);
     body.append(pv,
       h('div', { class: 'group' }, h('div', { class: 'row' }, icon('device'), h('span', { class: 'grow' }, t('Ikuti bahasa HP'), h('span', { class: 'sub' }, t('Saat ini: {l}', { l: LANGS.find(l => l.code === detectLang()).native }))),
-        toggle(s.followSystemLang, async v => { await store.setSetting('followSystemLang', v); preview = v ? detectLang() : (s.lang || 'id'); draw(); }, t('Ikuti bahasa HP')))),
+        toggle(s.followSystemLang, async v => { preview = v ? detectLang() : (s.lang || 'id'); await store.setSetting('followSystemLang', v); }, t('Ikuti bahasa HP')))),
       h('span', { class: 'lbl' }, t('Pilih bahasa')),
-      h('div', { class: 'group' }, LANGS.map(l => h('button', { class: 'row', type: 'button', disabled: s.followSystemLang, style: s.followSystemLang ? 'opacity:.45' : '', 'aria-pressed': active === l.code ? 'true' : 'false', onClick: async () => { preview = l.code; await store.setSetting('lang', l.code); draw(); } },
+      h('div', { class: 'group' }, LANGS.map(l => h('button', { class: 'row', type: 'button', disabled: s.followSystemLang, style: s.followSystemLang ? 'opacity:.45' : '', 'aria-pressed': active === l.code ? 'true' : 'false', onClick: async () => { preview = l.code; await store.setSetting('lang', l.code); } },
         h('span', { class: 'tico' + (active === l.code ? '' : ''), style: `width:36px;height:36px;font:700 .75rem var(--sans);text-transform:uppercase;${active === l.code ? 'background:var(--accent);color:var(--on-accent)' : ''}` }, l.code),
         h('span', { class: 'grow' }, l.native, h('span', { class: 'sub' }, t(l.name))),
         active === l.code ? icon('tick', 's') : null))),
       h('p', { class: 'small muted', style: 'margin:0' }, t('Hanya tampilan aplikasi yang berubah. Isi catatanmu tidak ikut diterjemahkan.')));
   };
   draw();
-  ctx.watch(['settings'], () => { clear(view); renderLanguage(view, args, ctx); });
+  ctx.watch(['settings'], draw);
 }
 
 export function renderSecurity(view, args, ctx) {
@@ -123,7 +128,7 @@ export function renderSecurity(view, args, ctx) {
       h('div', { class: 'group' },
         h('button', { class: 'row', type: 'button', onClick: async () => { if (await setupPin({ requireOld: true })) snack(t('PIN diperbarui')); } }, icon('shield'), h('span', { class: 'grow' }, t('Ubah PIN & pertanyaan pemulihan')), icon('right', 's')),
         h('div', { class: 'row' }, icon('lock'), h('span', { class: 'grow' }, t('Kunci aplikasi'), h('span', { class: 'sub' }, t('Minta PIN setiap membuka Lembar atau setelah 1 menit di latar'))),
-          toggle(s.appLock, async v => { if (!v && !(await requestUnlock())) { draw(); return; } await store.setSetting('appLock', v); snack(v ? t('Kunci aplikasi aktif') : t('Kunci aplikasi mati')); }, t('Kunci aplikasi'))),
+          toggle(s.appLock, async v => { if (!v && !(await requestUnlock({ force: true, title: t('Masukkan PIN') }))) { draw(); return; } await store.setSetting('appLock', v); snack(v ? t('Kunci aplikasi aktif') : t('Kunci aplikasi mati')); }, t('Kunci aplikasi'))),
         h('div', { class: 'row', style: bioOk ? '' : 'opacity:.5' }, icon('finger'), h('span', { class: 'grow' }, t('Buka dengan sidik jari'), h('span', { class: 'sub' }, bioOk ? t('Memakai sensor biometrik HP') : t('Tidak tersedia di perangkat atau browser ini'))),
           bioOk ? toggle(s.bio, async v => {
             if (v) { try { await bioRegister(); const ok = await bioVerify(); if (!ok) throw new Error('verify'); snack(t('Sidik jari aktif')); } catch (e) { await store.setSetting('bio', false); snack(t('Sidik jari tidak bisa diaktifkan')); draw(); } }
@@ -135,7 +140,7 @@ export function renderSecurity(view, args, ctx) {
         h('div', { class: 'row' }, icon('file'), h('span', { class: 'grow' }, t('Catatan terkunci')), h('span', { class: 'val' }, store.allNotes().filter(n => n.locked && !n.trashedAt).length))),
       h('div', { class: 'notice', style: 'background:var(--surface2);color:var(--ink2)' }, icon('info', 's'), t('Kunci membatasi akses di dalam Lembar. Untuk perlindungan penuh, aktifkan juga kunci layar HP dan buat backup secara rutin.')),
       h('button', { class: 'btn t danger', type: 'button', onClick: async () => {
-        if (!(await requestUnlock())) return;
+        if (!(await requestUnlock({ force: true }))) return;
         const ok = await confirm({ title: t('Hapus PIN?'), message: t('Semua buku dan catatan terkunci akan terbuka, dan kunci aplikasi dimatikan.'), ok: t('Hapus PIN'), danger: true, icon: 'unlock' });
         if (!ok) return;
         await removePin(); snack(t('PIN dihapus')); draw();

@@ -10,9 +10,13 @@ import { openNote } from '../collection.js';
 const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const TYPES = [['all', 'Semua'], ['text', 'Teks'], ['checklist', 'Checklist'], ['voice', 'Suara'], ['photo', 'Foto'], ['sketch', 'Sketsa'], ['journal', 'Jurnal']];
 
+// pencarian terakhir disimpan agar tetap ada saat kembali dari hasil pencarian
+let last = null;
 export function render(view, args, ctx, query = {}) {
-  const F = { type: 'all', books: new Set(query.book ? [query.book === '_none' ? null : query.book] : []), color: null, time: 'any', has: new Set(), archive: false, tag: query.tag || null };
+  const F = { type: 'all', books: new Set(query.book ? [query.book === '_none' ? null : query.book] : []), color: null, time: 'any', has: new Set(), archive: query.archive === '1', tag: query.tag || null };
   let q = '';
+  const restore = !query.tag && !query.book && !query.archive && last;
+  if (restore) { q = last.q; Object.assign(F, { type: last.type, color: last.color, time: last.time, archive: last.archive, tag: last.tag, books: new Set(last.books), has: new Set(last.has) }); }
   const input = h('input', { type: 'search', placeholder: t('Cari catatan, tag, atau isi…'), 'aria-label': t('Cari'), enterkeyhint: 'search', autocomplete: 'off' });
   const clearBtn = h('button', { class: 'ib sm', type: 'button', 'aria-label': t('Hapus pencarian'), hidden: true, onClick: () => { input.value = ''; q = ''; clearBtn.hidden = true; draw(); input.focus(); } }, icon('close', 's'));
   const box = h('label', { class: 'search focus', style: 'flex:1;width:auto;min-width:0' }, icon('search'), input, clearBtn);
@@ -26,7 +30,8 @@ export function render(view, args, ctx, query = {}) {
   const run = debounce(() => { q = input.value.trim(); draw(); }, 160);
   input.addEventListener('input', () => { clearBtn.hidden = !input.value; run(); });
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { run.flush(); remember(); input.blur(); } });
-  if (!query.tag && !query.book && !ctx.isWide()) setTimeout(() => input.focus(), 120);
+  if (q) { input.value = q; clearBtn.hidden = false; }
+  if (!query.tag && !query.book && !q && !ctx.isWide()) setTimeout(() => input.focus(), 120);
 
   function remember() {
     if (!q) return;
@@ -92,6 +97,7 @@ export function render(view, args, ctx, query = {}) {
   }
 
   function draw() {
+    last = { q, type: F.type, color: F.color, time: F.time, archive: F.archive, tag: F.tag, books: [...F.books], has: [...F.has] };
     drawChips();
     clear(body);
     const tokens = norm(q).split(/\s+/).filter(Boolean).map(x => x.replace(/^#/, ''));
@@ -104,7 +110,7 @@ export function render(view, args, ctx, query = {}) {
       }
       const tags = store.allTags().slice(0, 12);
       if (tags.length) body.append(h('span', { class: 'lbl', style: 'margin-bottom:8px' }, t('Tag')), h('div', { class: 'chips wrapx', style: 'margin-bottom:18px' }, tags.map(tg => h('button', { class: 'chip', type: 'button', onClick: () => { F.tag = tg.name; draw(); } }, '#' + tg.name))));
-      const recentNotes = store.sortNotes(store.liveNotes()).slice(0, 5);
+      const recentNotes = store.sortNotes(store.liveNotes().filter(n => !(store.isConcealed(n) && store.book(n.bookId)?.locked))).slice(0, 5);
       if (recentNotes.length) { body.append(h('span', { class: 'lbl' }, t('Baru dibuka'))); recentNotes.forEach(n => body.appendChild(resultRow(n, []))); }
       if (!recent.length && !tags.length && !recentNotes.length) body.appendChild(emptyState('search', t('Cari apa saja'), t('Judul, isi, item checklist, dan tag semuanya bisa dicari.')));
       return;
@@ -117,7 +123,7 @@ export function render(view, args, ctx, query = {}) {
         h('b', { style: 'font-size:1.05rem' }, t('Tidak ada yang cocok')),
         h('p', { class: 'small muted' }, q ? t('Belum ada catatan berisi “{q}”.', { q }) : t('Tidak ada catatan dengan filter ini.')),
         h('div', { class: 'stack', style: 'width:100%;max-width:320px;gap:10px' },
-          q ? btn(t('Buat catatan “{q}”', { q }), 'p', async () => { const n = await store.createNote({ type: 'text', title: q, blocks: [{ id: store.uid(), t: 'text', html: '' }] }); ctx.navigate('note/' + n.id); }, 'plus') : null,
+          q ? btn(t('Buat catatan “{q}”', { q }), 'p', async (e) => { if (e?.currentTarget?.disabled) return; if (e?.currentTarget) e.currentTarget.disabled = true; const n = await store.createNote({ type: 'text', title: q, blocks: [{ id: store.uid(), t: 'text', html: '' }] }); ctx.navigate('note/' + n.id); }, 'plus') : null,
           !F.archive ? btn(t('Cari juga di Arsip'), 'g', () => { F.archive = true; draw(); }, 'archive') : null,
           filterCount() ? btn(t('Atur ulang filter'), 't', () => { resetF(); draw(); }) : null)));
       return;

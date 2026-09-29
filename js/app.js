@@ -72,12 +72,23 @@ export async function navigate(path, { replace = false } = {}) {
   await settled();
   if (overlayOpen()) await closeAllOverlays();
   const cur = parseHash();
-  const tabSwitch = TABS.includes(cur.name) && TABS.includes(path.split(/[/?]/)[0]);
-  if (replace || tabSwitch) history.replaceState({ idx: navIdx }, '', '#/' + path);
-  else history.pushState({ idx: ++navIdx }, '', '#/' + path);
+  if (path === cur.raw && !replace) return;
+  const to = path.split(/[/?]/)[0];
+  const st = history.state || {};
+  // Tab: dari Beranda ke tab lain = push (Back kembali ke Beranda); antar tab lain = replace
+  if (TABS.includes(cur.name) && TABS.includes(to) && cur.name !== 'home') {
+    if (to === 'home' && st.fromHome && st.idx > 1) { history.back(); return; }
+    history.replaceState({ ...st }, '', '#/' + path);
+  } else if (replace) history.replaceState({ ...st, idx: navIdx }, '', '#/' + path);
+  else if (isWide() && cur.name === 'note' && to === 'note') history.replaceState({ ...st }, '', '#/' + path);
+  else history.pushState({ idx: ++navIdx, fromHome: cur.name === 'home' && TABS.includes(to) }, '', '#/' + path);
   route();
 }
-export function back(fallback = 'home') {
+// Paksa render ulang halaman saat ini (dipakai setelah data berubah di tempat)
+export function refresh() { current.key = null; current.aKey = null; return route(); }
+export async function back(fallback = 'home') {
+  await settled();
+  if (overlayOpen()) await closeAllOverlays();
   if (history.state && history.state.idx > 1) history.back();
   else navigate(fallback, { replace: true });
 }
@@ -85,8 +96,9 @@ export function back(fallback = 'home') {
 const ctxFor = (paneKey) => {
   const unsubs = [];
   return {
-    navigate, back, isWide, pane: paneKey,
+    navigate, back, isWide, refresh, pane: paneKey,
     watch(kinds, fn) { unsubs.push(store.subscribe(k => { if (kinds.some(x => k.has(x))) fn(k); })); },
+    onDispose(fn) { unsubs.push(fn); },
     _dispose() { unsubs.forEach(u => u()); },
   };
 };
@@ -102,7 +114,7 @@ async function mountView(pane, name, args, query) {
   let cleanup = null;
   try { cleanup = await mod.render(view, args, ctx, query); }
   catch (e) { console.error(e); view.appendChild(h('div', { class: 'empty' }, h('b', {}, t('Terjadi kesalahan')), h('p', { class: 'small muted' }, String(e.message || e)))); }
-  return () => { ctx._dispose(); if (typeof cleanup === 'function') cleanup(); };
+  return async () => { ctx._dispose(); if (typeof cleanup === 'function') { try { await cleanup(); } catch (e) { console.error(e); } } };
 }
 
 let routing = Promise.resolve();
@@ -111,11 +123,19 @@ export function route() { routing = routing.then(doRoute).catch(e => console.err
 async function doRoute() {
   document.body.classList.remove('selecting');
   const r = parseHash();
+  // flag sekali pakai (?rec=1, ?new=1) dihapus dari URL agar tidak terulang saat Back/muat ulang
+  const once = {};
+  for (const k of ['rec', 'new']) if (k in r.query) { once[k] = r.query[k]; delete r.query[k]; }
+  if (Object.keys(once).length && r.name !== 'new') {
+    const qs = new URLSearchParams(r.query).toString();
+    r.raw = r.raw.split('?')[0] + (qs ? '?' + qs : '');
+    history.replaceState(history.state, '', '#/' + r.raw);
+  }
   if (r.raw === current.key) return;
   // pembuatan catatan baru
   if (r.name === 'new') {
-    const n = await createNoteOfType(r.args[0] || 'text', r.query);
-    const next = n.type === 'sketch' && n.blocks[0] ? '#/sketch/' + n.id + '/' + n.blocks[0].id + '?new=1' : '#/note/' + n.id + (r.query.rec ? '?rec=1' : '');
+    const n = await createNoteOfType(r.args[0] || 'text', { ...r.query, ...once });
+    const next = n.type === 'sketch' && n.blocks[0] ? '#/sketch/' + n.id + '/' + n.blocks[0].id + '?new=1' : '#/note/' + n.id + (once.rec ? '?rec=1' : '');
     history.replaceState({ idx: navIdx }, '', next);
     return doRoute();
   }
@@ -140,18 +160,18 @@ async function doRoute() {
   if (split) {
     const mr = masterRoute;
     if (current.aKey !== mr) {
-      current.cleanupA && current.cleanupA();
+      current.cleanupA && await current.cleanupA();
       const m = parseMaster(mr);
       current.cleanupA = await mountView('pane-a', m.name, m.args, m.query);
       current.aKey = mr;
     }
-    current.cleanupB && current.cleanupB();
-    current.cleanupB = await mountView('pane-b', r.name, r.args, r.query);
+    current.cleanupB && await current.cleanupB();
+    current.cleanupB = await mountView('pane-b', r.name, r.args, { ...r.query, ...once });
   } else {
-    current.cleanupB && current.cleanupB(); current.cleanupB = null;
+    current.cleanupB && await current.cleanupB(); current.cleanupB = null;
     clear(document.getElementById('pane-b'));
-    current.cleanupA && current.cleanupA();
-    current.cleanupA = await mountView('pane-a', r.name, r.args, r.query);
+    current.cleanupA && await current.cleanupA();
+    current.cleanupA = await mountView('pane-a', r.name, r.args, { ...r.query, ...once });
     current.aKey = r.raw;
   }
   renderChrome(r);
@@ -236,8 +256,9 @@ export function openPhotoSheet(query = {}) {
     const files = await pickFile(opts);
     if (!files.length) return;
     s.close();
-    const n = await createPhotoNote(files, { ...query, scan });
-    navigate('note/' + n.id);
+    snack(t('Memproses foto…'));
+    try { const n = await createPhotoNote(files, { ...query, scan }); navigate('note/' + n.id); }
+    catch (e) { console.error(e); snack(t('Foto tidak bisa dibaca. Coba format JPG atau PNG.')); }
   };
   const row = (ic, bg, title, sub, fn) => h('button', { class: 'lrow', type: 'button', onClick: fn },
     h('span', { class: 'tico', style: `background:var(--${bg})` }, icon(ic)),
@@ -267,18 +288,33 @@ document.addEventListener('visibilitychange', () => {
   if (store.session.hiddenAt && Date.now() - store.session.hiddenAt > 60000) {
     store.session.unlocked = false;
     if (store.settings().appLock && store.hasPin()) lockGate();
-    else { current.key = null; current.aKey = null; route(); }
+    else {
+      const r = parseHash();
+      const n = r.name === 'note' ? store.note(r.args[0]) : null;
+      const b = r.name === 'book' ? store.book(r.args[0]) : null;
+      const m = isWide() && masterRoute ? parseMaster(masterRoute) : null;
+      const mb = m && m.name === 'book' ? store.book(m.args[0]) : null;
+      if ((n && store.isLockedNote(n)) || (b && b.locked) || (mb && mb.locked)) refresh(); else store.emit('notes');
+    }
   }
 });
 
+function offerUpdate(worker) {
+  window.__lembarUpdate = worker;
+  store.emit('settings');
+  snack(t('Versi baru Lembar tersedia'), { label: t('Muat ulang'), icon: 'refresh', onClick: () => worker.postMessage('skipWaiting'), duration: 12000 });
+}
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('./sw.js').then(reg => {
+    window.__lembarSW = reg;
+    if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
+    setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
     reg.addEventListener('updatefound', () => {
       const nw = reg.installing;
       nw && nw.addEventListener('statechange', () => {
         if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          snack(t('Versi baru Lembar tersedia'), { label: t('Muat ulang'), icon: 'refresh', onClick: () => nw.postMessage('skipWaiting') });
+          offerUpdate(nw);
         }
       });
     });
@@ -294,7 +330,7 @@ async function boot() {
   try {
     await store.init();
   } catch (e) {
-    document.getElementById('splash').innerHTML = '<div style="padding:24px;text-align:center;font-family:system-ui"><b>Lembar tidak bisa membuka penyimpanan.</b><p>Pastikan tidak dalam mode penyamaran, lalu muat ulang.</p></div>';
+    document.getElementById('splash').innerHTML = '<div style="padding:24px;text-align:center;font-family:system-ui"><b>' + t('Lembar tidak bisa membuka penyimpanan.') + '</b><p>' + t('Pastikan tidak dalam mode penyamaran, lalu muat ulang.') + '</p></div>';
     console.error(e);
     return;
   }
@@ -310,10 +346,10 @@ async function boot() {
     history.replaceState({ idx: navIdx }, '', location.pathname + '#/note/' + n.id);
   } else history.replaceState({ idx: navIdx }, '', location.hash || '#/home');
   const s = store.settings();
-  if (s.appLock && store.hasPin()) await lockGate(true);
+  const hideSplash = () => { const sp = document.getElementById('splash'); if (!sp) return; sp.classList.add('hide'); setTimeout(() => sp.remove(), 400); };
+  if (s.appLock && store.hasPin()) { hideSplash(); await lockGate(true); }
   await route();
-  document.getElementById('splash').classList.add('hide');
-  setTimeout(() => document.getElementById('splash')?.remove(), 400);
+  hideSplash();
   startReminders();
   registerSW();
 }

@@ -21,7 +21,8 @@ export function render(view, args, ctx, query = {}) {
   view.appendChild(header(t('Mulai dari template'), { backTo: 'home' }, ctx));
   const body = h('div', { class: 'wrap stack pad-b' });
   view.appendChild(h('div', { class: 'scroll' }, body));
-  const use = async (id) => { const n = await createFromTemplate(id, query.book || null); ctx.navigate('note/' + n.id, { replace: true }); };
+  let busy = false;
+  const use = async (id) => { if (busy) return; busy = true; try { const n = await createFromTemplate(id, query.book || null); ctx.navigate('note/' + n.id, { replace: true }); } finally { setTimeout(() => { busy = false; }, 800); } };
   const pickSource = () => {
     const notes = store.sortNotes(store.liveNotes().filter(n => !store.isConcealed(n) && n.type !== 'sketch' && n.type !== 'voice')).slice(0, 40);
     const list = h('div', { class: 'stack', style: 'gap:8px' });
