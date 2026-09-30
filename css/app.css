@@ -490,3 +490,10 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 .tpl-new:active{background:var(--accent-soft)!important}
 .tpl-plus{width:44px;height:44px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
 .sw-row{touch-action:pan-y}
+/* Kartu berbentuk <button>: sebagian browser tidak meregangkan isi flex secara default,
+   jadi pratinjau template dan bilah progres menyusut. Tetapkan secara eksplisit. */
+.tpl,.card{align-items:stretch}
+.tpl .pv{width:100%;box-sizing:border-box;flex-shrink:0;align-self:stretch}
+.tpl .pv>*{align-self:stretch;flex-shrink:0}
+.tpl .pv .hd{align-self:flex-start}
+.card>.prog,.card>.mini{align-self:stretch;width:100%}
