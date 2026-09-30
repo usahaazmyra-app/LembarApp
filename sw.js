@@ -1,6 +1,6 @@
 // Lembar · service worker (offline penuh)
 // File ini dibuat otomatis oleh tools-build-sw.py dari sw.template.js.
-const VERSION = 'lembar-cc5e9d1ebc';
+const VERSION = 'lembar-eafd0254b5';
 const FONT_CACHE = 'lembar-fonts-v1';
 const ASSETS = [
   "./",

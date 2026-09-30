@@ -497,3 +497,6 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 .tpl .pv>*{align-self:stretch;flex-shrink:0}
 .tpl .pv .hd{align-self:flex-start}
 .card>.prog,.card>.mini{align-self:stretch;width:100%}
+/* kartu "Template sendiri" tetap rata tengah */
+.tpl.tpl-new{align-items:center}
+.tpl.tpl-new .tpl-plus{align-self:center;flex-shrink:0;color:var(--accent);padding:0;line-height:0}
