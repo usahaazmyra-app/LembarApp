@@ -533,3 +533,37 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 .kb-open .nav,.kb-open .fab{display:none!important}
 .kb-open .sheet{padding-bottom:16px}
 .kb-open .ed-top{padding-top:calc(6px + var(--safe-t))}
+
+/* foto di catatan: ukuran tampil & alat atur */
+.img-fig{position:relative;width:100%;margin:0 auto;transition:width .2s}
+.img-fig.sz-s{width:40%}.img-fig.sz-m{width:62%}.img-fig.sz-l{width:82%}
+.img-fig.sz-s .blk-tools .ib{width:30px;height:30px}
+.img-blk .cap{text-align:left}
+/* editor potong */
+.ie{position:absolute;inset:0;background:#0d0c0b;display:flex;flex-direction:column;color:#fff}
+.ie-hdr .ib{color:#fff}
+.ie-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+.ie-wrap{position:relative}
+.ie-canvas{width:100%;height:100%;display:block}
+.ie-box{position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.58);outline:2px solid #fff;cursor:move;touch-action:none}
+.ie-grid{position:absolute;inset:0;pointer-events:none;background:
+  linear-gradient(90deg,transparent 33.2%,rgba(255,255,255,.45) 33.3%,rgba(255,255,255,.45) 33.6%,transparent 33.7%,transparent 66.4%,rgba(255,255,255,.45) 66.5%,rgba(255,255,255,.45) 66.8%,transparent 66.9%),
+  linear-gradient(0deg,transparent 33.2%,rgba(255,255,255,.45) 33.3%,rgba(255,255,255,.45) 33.6%,transparent 33.7%,transparent 66.4%,rgba(255,255,255,.45) 66.5%,rgba(255,255,255,.45) 66.8%,transparent 66.9%)}
+.ie-h{position:absolute;width:30px;height:30px;touch-action:none}
+.ie-h::after{content:'';position:absolute;width:18px;height:18px;border:4px solid #fff}
+.ie-h.ie-nw{left:-8px;top:-8px}.ie-h.ie-nw::after{left:4px;top:4px;border-right:0;border-bottom:0}
+.ie-h.ie-ne{right:-8px;top:-8px}.ie-h.ie-ne::after{right:4px;top:4px;border-left:0;border-bottom:0}
+.ie-h.ie-sw{left:-8px;bottom:-8px}.ie-h.ie-sw::after{left:4px;bottom:4px;border-right:0;border-top:0}
+.ie-h.ie-se{right:-8px;bottom:-8px}.ie-h.ie-se::after{right:4px;bottom:4px;border-left:0;border-top:0}
+.ie-dock{padding:10px 14px calc(14px + var(--safe-b));display:flex;flex-direction:column;gap:12px;background:#0d0c0b}
+.ie-ratios{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.ie-ratios .chip{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.18)}
+.ie-ratios .chip.on{background:#fff;color:#1b1a18;border-color:#fff}
+.ie-tools{display:flex;justify-content:center;gap:28px}
+.ie-tool{background:transparent;border:0;color:#fff;display:flex;flex-direction:column;align-items:center;gap:4px;font:600 .75rem var(--sans);min-width:64px;min-height:52px}
+/* penampil foto dengan zoom */
+.zv-stage{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;touch-action:none}
+.zv-stage img{width:100%;height:100%;flex:1;touch-action:none;object-fit:contain;transform-origin:center;user-select:none;-webkit-user-drag:none}
+.zv-bar{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px calc(14px + var(--safe-b));color:#fff}
+.zv-bar .ib{color:#fff;background:rgba(255,255,255,.1)}
+.zv-lvl{min-width:56px;text-align:center;font:700 .85rem var(--sans);font-variant-numeric:tabular-nums}

@@ -140,8 +140,8 @@ export function renderExport(view, args, ctx) {
       h('div', { class: 'quickacts', style: 'grid-template-columns:repeat(3,minmax(0,1fr))' }, f('pdf', 'PDF', t('Siap cetak & dibagikan')), f('md', 'Markdown', t('Untuk aplikasi catatan lain')), f('txt', t('Teks'), t('Paling sederhana'))),
       h('span', { class: 'lbl' }, t('Cakupan')),
       h('div', { class: 'seg' }, [['all', t('Semua catatan')], ['books', t('Pilih buku')]].map(([k, l]) => h('button', { type: 'button', class: scope === k ? 'on' : '', onClick: () => { scope = k; draw(); } }, l))),
-      scope === 'books' ? h('div', { class: 'chips wrapx' }, books.filter(b => !b.locked).map(b => h('button', { class: 'chip' + (sel.has(b.id) ? ' on' : ''), type: 'button', onClick: () => { sel.has(b.id) ? sel.delete(b.id) : sel.add(b.id); draw(); } }, b.name))) : null,
-      fmt !== 'pdf' ? h('div', { class: 'group' }, h('div', { class: 'row' }, h('span', { class: 'grow' }, t('Satu file per buku'), h('span', { class: 'sub' }, t('Dikemas dalam satu file .zip'))), toggle(split, v => { split = v; }, t('Satu file per buku')))) : null,
+      scope === 'books' ? h('div', { class: 'chips wrapx' }, books.filter(b => !b.locked).map(b => h('button', { class: 'chip' + (sel.has(b.id) ? ' on' : ''), type: 'button', onClick: () => { sel.has(b.id) ? sel.delete(b.id) : sel.add(b.id); draw(); } }, b.name))) : '',
+      fmt !== 'pdf' ? h('div', { class: 'group' }, h('div', { class: 'row' }, h('span', { class: 'grow' }, t('Satu file per buku'), h('span', { class: 'sub' }, t('Dikemas dalam satu file .zip'))), toggle(split, v => { split = v; }, t('Satu file per buku')))) : '',
       h('div', { class: 'notice k1' }, icon('lock', 's'), t('Catatan terkunci tidak ikut diekspor. Foto hanya disertakan di PDF.')),
       btn(t('Ekspor {n} catatan', { n: pool().length }), 'p', run, 'download'));
   };

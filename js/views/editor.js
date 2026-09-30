@@ -10,6 +10,7 @@ import { recordAudio } from '../lib/recorder.js';
 import { imageBlocks } from '../lib/create.js';
 import { openShare } from '../lib/share.js';
 import { ensureNotifyPermission } from '../lib/reminders.js';
+import { openCropEditor, openViewer, restoreOriginal } from '../lib/imageedit.js';
 
 const uid = store.uid;
 const players = new Set();
@@ -187,8 +188,10 @@ export async function render(view, [id], ctx, query = {}) {
       store.attachmentURL(b.att).then(u => { img.src = u; });
       img.addEventListener('click', () => openLightbox(b));
       wrap.classList.add('img-blk');
-      wrap.append(img, h('div', { class: 'blk-tools' }, iconBtn('trash', t('Hapus foto'), () => removeBlock(b))),
-        b.original && b.size ? h('div', { class: 'cap' }, t('Dikompres {a} → {b}', { a: fmtBytes(b.original), b: fmtBytes(b.size) })) : null);
+      const fig = h('div', { class: 'img-fig sz-' + (b.disp || 'full') }, img,
+        h('div', { class: 'blk-tools' }, iconBtn('edit', t('Atur foto'), () => photoMenu(b)), iconBtn('trash', t('Hapus foto'), () => removeBlock(b))));
+      wrap.append(fig);
+      if (b.original && b.size && !b.crop) wrap.append(h('div', { class: 'cap' }, t('Dikompres {a} → {b}', { a: fmtBytes(b.original), b: fmtBytes(b.size) })));
     } else if (b.t === 'audio') {
       wrap.appendChild(audioPlayer(b));
     } else if (b.t === 'sketch') {
@@ -206,10 +209,11 @@ export async function render(view, [id], ctx, query = {}) {
     if (idx < 0) return;
     note.blocks.splice(idx, 1);
     if (b.att) removedAtts.add(b.att);
+    if (b.orig) removedAtts.add(b.orig);
     ensureTrailingText();
     await doSave();
     drawBlocks();
-    hideUndo = snack(t('Blok dihapus'), { label: t('Urungkan'), icon: 'undo', onClick: async () => { if (disposed) return; if (b.att) removedAtts.delete(b.att); note.blocks.splice(Math.min(idx, note.blocks.length), 0, b); await doSave(); drawBlocks(); } });
+    hideUndo = snack(t('Blok dihapus'), { label: t('Urungkan'), icon: 'undo', onClick: async () => { if (disposed) return; if (b.att) removedAtts.delete(b.att); if (b.orig) removedAtts.delete(b.orig); note.blocks.splice(Math.min(idx, note.blocks.length), 0, b); await doSave(); drawBlocks(); } });
   }
 
   function insertBlocks(blocks) {
@@ -671,14 +675,39 @@ export async function render(view, [id], ctx, query = {}) {
 
   // ---------- lightbox ----------
   function openLightbox(b) {
-    let fs;
-    const img = h('img', { alt: t('Foto') });
-    store.attachmentURL(b.att).then(u => { img.src = u; });
-    fs = fullscreen(h('div', { class: 'lb' },
-      h('div', { class: 'hdr', style: 'color:#fff' }, iconBtn('close', t('Tutup'), () => fs.close()), h('span', { class: 'grow' }),
-        iconBtn('share', t('Bagikan foto'), async () => { const blob = await store.getAttachmentBlob(b.att); const { shareOrDownload } = await import('../ui.js'); shareOrDownload(blob, 'foto-lembar.jpg', t('Foto')); }),
-        iconBtn('trash', t('Hapus foto'), () => { fs.close(); removeBlock(b); })),
-      img));
+    openViewer(b, {
+      onEdit: () => cropPhoto(b),
+      onShare: async () => { const blob = await store.getAttachmentBlob(b.att); const { shareOrDownload } = await import('../ui.js'); shareOrDownload(blob, 'foto-lembar.jpg', t('Foto')); },
+      onDelete: () => removeBlock(b),
+    });
+  }
+  async function cropPhoto(b) {
+    collect();
+    if (await openCropEditor(b)) { await doSave(); drawBlocks(); snack(t('Foto diperbarui')); }
+  }
+  // ukuran tampil foto di dalam catatan
+  const SIZES = [['s', 'Kecil'], ['m', 'Sedang'], ['l', 'Besar'], ['full', 'Penuh']];
+  function photoMenu(b) {
+    let sh;
+    const seg = h('div', { class: 'seg' });
+    const drawSeg = () => seg.replaceChildren(...SIZES.map(([k, label]) => h('button', { type: 'button', class: (b.disp || 'full') === k ? 'on' : '', onClick: async () => {
+      if (k === 'full') delete b.disp; else b.disp = k;
+      drawSeg();
+      const fig = blockEls.get(b.id)?.querySelector('.img-fig');
+      if (fig) fig.className = 'img-fig sz-' + k;
+      await doSave();
+    } }, t(label))));
+    drawSeg();
+    const row = (ic, label, fn, cls = '') => h('button', { class: 'mrow ' + cls, type: 'button', onClick: () => { sh.close(); setTimeout(fn, 250); } }, icon(ic), h('span', { class: 'grow' }, label));
+    sh = sheet(t('Atur foto'), h('div', { class: 'stack' },
+      h('span', { class: 'small', style: 'font-weight:700' }, t('Ukuran di catatan')), seg,
+      h('div', { class: 'menu-list', style: 'border-top:1px solid var(--line);padding-top:6px' },
+        row('crop', t('Potong & putar'), () => cropPhoto(b)),
+        row('zoomin', t('Lihat & perbesar'), () => openLightbox(b)),
+        b.orig ? row('refresh', t('Kembalikan foto asli'), async () => {
+          collect(); await restoreOriginal(b); await doSave(); drawBlocks(); snack(t('Foto asli dikembalikan'));
+        }) : null,
+        row('trash', t('Hapus foto'), () => removeBlock(b), 'danger'))));
   }
 
   // ---------- menu lainnya ----------

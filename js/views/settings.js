@@ -35,7 +35,7 @@ export function render(view, args, ctx) {
         row('#/export', 'print', t('Ekspor PDF / Markdown / Teks')),
         h('div', { class: 'row' }, icon('device'), h('span', { class: 'grow' }, t('Penyimpanan terpakai'), h('span', { class: 'sub storage-sub' }, t('Menghitung…')))),
         h('div', { class: 'row' }, icon('trash'), h('span', { class: 'grow' }, t('Hapus otomatis Sampah')), h('span', { class: 'val' }, t('30 hari')))),
-      installRow(),
+      installRow() || '',
       h('span', { class: 'lbl' }, t('Tentang')),
       h('div', { class: 'group' },
         row('#/onboarding?again=1', 'sparkle', t('Lihat panduan awal')),

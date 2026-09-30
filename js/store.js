@@ -206,12 +206,13 @@ export async function duplicateNote(id) {
   // duplicate attachments so deleting one copy does not break the other
   for (const b of copy.blocks) {
     if (b.att) { const blob = await getAttachmentBlob(b.att); if (blob) b.att = await putAttachment(blob); }
+    if (b.orig) { const blob = await getAttachmentBlob(b.orig); if (blob) b.orig = await putAttachment(blob); }
   }
   return createNote(copy);
 }
 
 export function noteAttachments(n) {
-  return (n.blocks || []).map(b => b.att).filter(Boolean);
+  return (n.blocks || []).flatMap(b => [b.att, b.orig]).filter(Boolean); // orig = foto asli sebelum dipotong
 }
 
 // ---------- attachments ----------
