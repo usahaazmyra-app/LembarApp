@@ -769,5 +769,18 @@ export default {
 "Peta": "Map",
 "Ide": "Idea",
 "Bintang": "Star",
-"Rumah": "Home"
+"Rumah": "Home",
+"Teks biasa": "Normal text",
+"Judul & subjudul": "Heading & subheading",
+"Daftar poin, angka, atau huruf": "Bullet, numbered, or lettered list",
+"Subjudul": "Subheading",
+"Jadikan sub-poin": "Make sub-item",
+"Keluar": "Move out",
+"Huruf": "Letters",
+"Angka": "Numbers",
+"Poin": "Bullets",
+"Cepat: ketik {a}, {b}, atau {c} di awal baris, lalu spasi. Tekan Enter dua kali untuk keluar dari daftar.": "Quick: type {a}, {b}, or {c} at the start of a line, then a space. Press Enter twice to leave the list.",
+"Cepat: ketik {a} atau {b} di awal baris, lalu spasi.": "Quick: type {a} or {b} at the start of a line, then a space.",
+"Bagaimana membuat judul, subjudul, dan daftar bernomor?": "How do I make headings, subheadings, and numbered lists?",
+"Di toolbar editor, ketuk H lalu pilih Judul, Subjudul, atau Teks biasa. Ketuk ikon daftar lalu pilih Poin, Angka (1, 2, 3), atau Huruf (a, b, c). Saat kursor ada di daftar, pilih “Jadikan sub-poin” untuk membuat poin bertingkat. Cara cepat: ketik # atau ## di awal baris untuk judul dan subjudul, atau - , 1. , a. untuk daftar, lalu tekan spasi. Tekan Enter dua kali untuk keluar dari daftar.": "In the editor toolbar, tap H and choose Heading, Subheading, or Normal text. Tap the list icon and choose Bullets, Numbers (1, 2, 3), or Letters (a, b, c). With the cursor in a list, choose “Make sub-item” for nested items. Shortcut: type # or ## at the start of a line for a heading or subheading, or - , 1. , a. for a list, then press space. Press Enter twice to leave the list."
 };

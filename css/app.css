@@ -500,3 +500,26 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 /* kartu "Template sendiri" tetap rata tengah */
 .tpl.tpl-new{align-items:center}
 .tpl.tpl-new .tpl-plus{align-self:center;flex-shrink:0;color:var(--accent);padding:0;line-height:0}
+
+/* daftar bernomor & berhuruf, termasuk sub-daftar */
+.rt ol{list-style-type:decimal}
+.rt ol[type="a"]{list-style-type:lower-alpha}
+.rt ol ol:not([type]){list-style-type:lower-alpha}
+.rt ol ol ol:not([type]){list-style-type:lower-roman}
+.rt ul ul{list-style-type:circle}
+.rt li{padding-left:2px;margin:.1em 0}
+.rt li::marker{color:var(--ink2);font-weight:600}
+.rt h2{font-size:1.25rem;margin-top:.6em}
+.rt h3{font-size:1.06rem;margin-top:.5em;color:var(--ink2)}
+/* menu format di atas toolbar */
+.fmt-pop{position:absolute;z-index:9;left:12px;right:12px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px;display:flex;flex-direction:column;gap:2px;max-width:420px;margin:0 auto}
+.fmt-pop .fp-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.fmt-pop button{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;min-height:58px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:600 .75rem var(--sans)}
+.fmt-pop button b{font:700 1.02rem/1.1 var(--serif)}
+.fmt-pop button.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.fmt-pop .fp-ind{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.fmt-pop .fp-ind button{min-height:40px;flex-direction:row;gap:6px}
+.fmt-pop .fp-tip{font-size:.72rem;color:var(--muted);padding:6px 4px 2px;line-height:1.4}
+.fmt-pop .fp-tip code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--surface2);border-radius:5px;padding:0 4px;color:var(--ink)}
+.toolbar .tb-glyph{font:800 .8rem var(--sans);letter-spacing:-.02em}
+.rt ol[type="i"]{list-style-type:lower-roman}

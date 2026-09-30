@@ -156,6 +156,7 @@ export async function render(view, [id], ctx, query = {}) {
 
   // ---------- blok ----------
   function drawBlocks() {
+    closeFormatMenu();
     stopPlayers(); savedRange = null;
     clear(blocksHost); blockEls.clear();
     note.blocks.forEach((b, i) => { const el = renderBlock(b, i); blockEls.set(b.id, el); blocksHost.appendChild(el); });
@@ -172,7 +173,7 @@ export async function render(view, [id], ctx, query = {}) {
       const firstText = note.blocks.findIndex(x => x.t === 'text' || x.t === 'prompt') === i;
       const rt = h('div', { class: 'rt', contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': b.label || t('Isi catatan'), 'data-ph': b.label ? t('Ketuk untuk menulis…') : (firstText ? t('Mulai menulis… ketik # untuk tag, [[ untuk menautkan catatan') : t('Lanjut menulis…')), spellcheck: 'true' });
       rt.innerHTML = sanitizeHTML(b.html);
-      rt.addEventListener('input', () => { touch(); checkLinkTrigger(rt); });
+      rt.addEventListener('input', e => { if (!e.inputType || e.inputType.startsWith('insert')) autoFormat(rt); touch(); checkLinkTrigger(rt); updateToolbar(); });
       rt.addEventListener('keydown', e => onRtKey(e, rt));
       rt.addEventListener('paste', e => { e.preventDefault(); const txt = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, txt); });
       rt.addEventListener('blur', () => { setTimeout(() => { if (!sugg.contains(document.activeElement)) hideSugg(); }, 150); });
@@ -417,8 +418,8 @@ export async function render(view, [id], ctx, query = {}) {
     return h('div', { class: 'toolbar', role: 'toolbar', 'aria-label': t('Format dan sisipkan') },
       tb('bold', t('Tebal'), () => cmd('bold'), 'bold'),
       tb('italic', t('Miring'), () => cmd('italic'), 'italic'),
-      tb(h('span', { style: 'font-size:.8rem;font-weight:800' }, 'H'), t('Judul bagian'), () => cmd('block', 'h2'), 'h2'),
-      tb('list', t('Daftar'), () => cmd('insertUnorderedList'), 'ul'),
+      tb(h('span', { class: 'tb-glyph', 'data-glyph': 'h' }, 'H'), t('Judul & subjudul'), e => openFormatMenu('heading', e.currentTarget), 'head'),
+      tb(h('span', { 'data-glyph': 'list' }, icon('list', 's')), t('Daftar poin, angka, atau huruf'), e => openFormatMenu('list', e.currentTarget), 'list'),
       tb('quote', t('Kutipan'), () => cmd('block', 'blockquote'), 'bq'),
       tb('code', t('Kode'), () => cmd('block', 'pre'), 'pre'),
       h('span', { class: 'sep' }),
@@ -432,10 +433,156 @@ export async function render(view, [id], ctx, query = {}) {
     );
   }
   function updateToolbar() {
+    const blk = () => (document.queryCommandValue('formatBlock') || '').toLowerCase();
     const map = { bold: () => document.queryCommandState('bold'), italic: () => document.queryCommandState('italic'),
-      h2: () => document.queryCommandValue('formatBlock').toLowerCase() === 'h2', bq: () => document.queryCommandValue('formatBlock').toLowerCase() === 'blockquote',
-      pre: () => document.queryCommandValue('formatBlock').toLowerCase() === 'pre', ul: () => document.queryCommandState('insertUnorderedList') };
+      head: () => ['h1', 'h2', 'h3'].includes(blk()), bq: () => blk() === 'blockquote',
+      pre: () => blk() === 'pre', list: () => !!currentList() };
     toolbar.querySelectorAll('button[data-k]').forEach(b => { const f = map[b.dataset.k]; if (f) { try { b.classList.toggle('on', !!f()); } catch (e) { /* noop */ } } });
+    // ikon tombol daftar mengikuti jenis daftar yang aktif: • / 1. / a.
+    const kind = listKind(currentList());
+    const g = toolbar.querySelector('[data-glyph="list"]');
+    if (g && g.dataset.kind !== kind) { g.dataset.kind = kind; g.replaceChildren(kind === 'number' || kind === 'roman' ? h('span', { class: 'tb-glyph' }, kind === 'roman' ? 'i.' : '1.') : kind === 'alpha' ? h('span', { class: 'tb-glyph' }, 'a.') : icon('list', 's')); }
+    const hg = toolbar.querySelector('[data-glyph="h"]');
+    if (hg) { const v = blk(); const txt = v === 'h3' ? 'H2' : 'H'; if (hg.textContent !== txt) hg.textContent = txt; }
+  }
+
+  // ---------- judul, subjudul & daftar ----------
+  function caretEl() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    const n = sel.getRangeAt(0).startContainer;
+    const el = n.nodeType === 1 ? n : n.parentElement;
+    return el && el.closest('.rt') && view.contains(el) ? el : null;
+  }
+  function currentList() { const el = caretEl(); if (!el) return null; const l = el.closest('ol,ul'); return l && l.closest('.rt') ? l : null; }
+  function listKind(l) { if (!l) return 'none'; if (l.tagName === 'UL') return 'bullet'; const ty = l.getAttribute('type') || '1'; return ty === 'a' ? 'alpha' : ty === 'i' ? 'roman' : 'number'; }
+  const setOlType = (l, ty) => { if (ty && ty !== '1') l.setAttribute('type', ty); else l.removeAttribute('type'); };
+  // browser otomatis menyambung daftar baru ke daftar di atasnya; pisahkan agar mulai dari 1 / a lagi
+  function splitFromPrevious(li, kind) {
+    const old = li.parentElement;
+    if (!old || li === old.firstElementChild) { if (old && old.tagName === 'OL') setOlType(old, kind === 'alpha' ? 'a' : '1'); return; }
+    const nl = document.createElement(old.tagName);
+    if (nl.tagName === 'OL') setOlType(nl, kind === 'alpha' ? 'a' : '1');
+    let n = li; const move = [];
+    while (n) { move.push(n); n = n.nextSibling; }
+    move.forEach(x => nl.appendChild(x));
+    old.after(nl);
+    placeCaret(li, true);
+  }
+  function ensureRtFocus() {
+    if (caretEl()) return true;
+    const target = lastFocus && blockEls.get(lastFocus.blockId)?.querySelector('.rt') || blocksHost.querySelector('.rt');
+    if (!target) return false;
+    target.focus();
+    const sel = window.getSelection();
+    if (savedRange && target.contains(savedRange.startContainer)) { sel.removeAllRanges(); sel.addRange(savedRange); } else placeCaret(target, true);
+    return true;
+  }
+  function setList(kind) {
+    if (!ensureRtFocus()) return;
+    const cur = currentList(); const ck = listKind(cur);
+    if (ck === kind) {
+      // ketuk jenis yang sama lagi = kembali ke teks biasa
+      document.execCommand(kind === 'bullet' ? 'insertUnorderedList' : 'insertOrderedList');
+    } else if (kind === 'bullet') {
+      if (ck !== 'none') document.execCommand(ck === 'bullet' ? 'insertUnorderedList' : 'insertOrderedList');
+      document.execCommand('insertUnorderedList');
+      const li = caretEl() && caretEl().closest('li');
+      if (li) splitFromPrevious(li, 'bullet');
+    } else if (ck !== 'none' && ck !== 'bullet') {
+      setOlType(cur, kind === 'alpha' ? 'a' : '1');
+    } else {
+      if (ck === 'bullet') document.execCommand('insertUnorderedList');
+      document.execCommand('insertOrderedList');
+      const li = caretEl() && caretEl().closest('li');
+      if (li) splitFromPrevious(li, kind);
+    }
+    touch(); updateToolbar();
+  }
+  function setHeading(tag) {
+    if (!ensureRtFocus()) return;
+    const cur = (document.queryCommandValue('formatBlock') || '').toLowerCase();
+    document.execCommand('formatBlock', false, cur === tag || tag === 'p' ? 'div' : tag);
+    touch(); updateToolbar();
+  }
+  function indentList(dir) {
+    if (!currentList()) return;
+    document.execCommand(dir > 0 ? 'indent' : 'outdent');
+    // sub-daftar bernomor berganti gaya per tingkat: 1. → a. → i.
+    const l = currentList();
+    if (dir > 0 && l && l.tagName === 'OL') {
+      const parent = l.parentElement && l.parentElement.closest('ol,ul');
+      if (parent && parent.tagName === 'OL') setOlType(l, { '1': 'a', a: 'i', i: '1' }[parent.getAttribute('type') || '1']);
+    }
+    // browser kadang menambahkan style; biarkan sanitizer yang membersihkan saat simpan
+    touch(); updateToolbar();
+  }
+  let fmtPop = null;
+  function closeFormatMenu() { if (fmtPop) { fmtPop.remove(); fmtPop = null; document.removeEventListener('pointerdown', onOutside, true); } }
+  function onOutside(e) { if (fmtPop && !fmtPop.contains(e.target) && !e.target.closest('.toolbar')) closeFormatMenu(); }
+  function openFormatMenu(kind, anchor) {
+    const wasOpen = fmtPop && fmtPop.dataset.kind === kind;
+    closeFormatMenu(); hideSugg();
+    if (wasOpen) return;
+    ensureRtFocus();
+    const opt = (label, preview, on, fn) => {
+      const b = h('button', { type: 'button', class: on ? 'on' : '', 'aria-pressed': on ? 'true' : 'false' }, h('b', {}, preview), label);
+      b.addEventListener('pointerdown', e => e.preventDefault());
+      b.addEventListener('click', () => { fn(); closeFormatMenu(); });
+      return b;
+    };
+    const pop = h('div', { class: 'fmt-pop', role: 'menu', 'data-kind': kind });
+    if (kind === 'heading') {
+      const v = (document.queryCommandValue('formatBlock') || '').toLowerCase();
+      pop.append(h('div', { class: 'fp-row' },
+        opt(t('Judul bagian'), 'H', v === 'h2' || v === 'h1', () => setHeading('h2')),
+        opt(t('Subjudul'), 'H2', v === 'h3', () => setHeading('h3')),
+        opt(t('Teks biasa'), 'Aa', !['h1', 'h2', 'h3'].includes(v), () => setHeading('p'))),
+        h('div', { class: 'fp-tip', html: escapeHTML(t('Cepat: ketik {a} atau {b} di awal baris, lalu spasi.')).replace('{a}', '<code>#</code>').replace('{b}', '<code>##</code>') }));
+    } else {
+      const k = listKind(currentList());
+      pop.append(h('div', { class: 'fp-row' },
+        opt(t('Poin'), '•', k === 'bullet', () => setList('bullet')),
+        opt(t('Angka'), '1. 2. 3.', k === 'number' || k === 'roman', () => setList('number')),
+        opt(t('Huruf'), 'a. b. c.', k === 'alpha', () => setList('alpha'))));
+      if (k !== 'none') {
+        const ib = (ic, label, dir) => { const b = h('button', { type: 'button' }, icon(ic, 's'), label); b.addEventListener('pointerdown', e => e.preventDefault()); b.addEventListener('click', () => { indentList(dir); }); return b; };
+        pop.append(h('div', { class: 'fp-ind' }, ib('outdent', t('Keluar'), -1), ib('indent', t('Jadikan sub-poin'), 1)));
+      }
+      pop.append(h('div', { class: 'fp-tip', html: escapeHTML(t('Cepat: ketik {a}, {b}, atau {c} di awal baris, lalu spasi. Tekan Enter dua kali untuk keluar dari daftar.')).replace('{a}', '<code>-</code>').replace('{b}', '<code>1.</code>').replace('{c}', '<code>a.</code>') }));
+    }
+    view.appendChild(pop);
+    const tbRect = toolbar.getBoundingClientRect(); const vr = view.getBoundingClientRect();
+    pop.style.bottom = (vr.bottom - tbRect.top + 8) + 'px';
+    fmtPop = pop;
+    setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
+    void anchor;
+  }
+  // ketik "1. ", "a. ", "- ", "# " atau "## " di awal baris untuk format otomatis
+  function autoFormat(rt) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    if (!r.collapsed || r.startContainer.nodeType !== 3) return;
+    const el = r.startContainer.parentElement;
+    if (!el || el.closest('li,pre,blockquote,h1,h2,h3,a')) return;
+    const block = el.closest('div,p');
+    const root = block && block !== rt && rt.contains(block) ? block : rt;
+    const pre = document.createRange();
+    pre.setStart(root, 0); pre.setEnd(r.startContainer, r.startOffset);
+    const txt = pre.toString().replace(/ /g, ' ');
+    const m = txt.match(/^(##|#|[-*•]|1[.)]|[aA][.)]) $/);
+    if (!m) return;
+    // hapus penanda ("1. ", "# ", ...) dengan perintah hapus bawaan supaya posisi kursor tetap valid
+    for (let i = 0; i < txt.length; i++) sel.modify('extend', 'backward', 'character');
+    document.execCommand('delete');
+    const k = m[1];
+    if (k === '#') document.execCommand('formatBlock', false, 'h2');
+    else if (k === '##') document.execCommand('formatBlock', false, 'h3');
+    else if (k === '1.' || k === '1)') setList('number');
+    else if (/^[aA]/.test(k)) setList('alpha');
+    else setList('bullet');
+    touch(); updateToolbar();
   }
 
   async function addPhotos(opts) {
@@ -614,6 +761,7 @@ export async function render(view, [id], ctx, query = {}) {
     document.removeEventListener('visibilitychange', onHide);
     window.removeEventListener('pagehide', onHide);
     disposed = true; if (hideUndo && removedAtts.size) hideUndo();
+    closeFormatMenu();
     stopPlayers(); players.forEach(a => { if (!document.contains(a)) { a.removeAttribute('src'); players.delete(a); } });
     save.cancel();
     if (!store.note(note.id)) return;

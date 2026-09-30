@@ -73,7 +73,8 @@ export function sanitizeHTML(html) {
           continue;
         }
         for (const attr of [...child.attributes]) {
-          const keep = (child.tagName === 'A' && (attr.name === 'data-note' || attr.name === 'class' || attr.name === 'contenteditable'));
+          const keep = (child.tagName === 'A' && (attr.name === 'data-note' || attr.name === 'class' || attr.name === 'contenteditable'))
+            || (child.tagName === 'OL' && attr.name === 'type' && ['1', 'a', 'A', 'i', 'I'].includes(attr.value)); // penomoran huruf/angka
           if (!keep) child.removeAttribute(attr.name);
         }
         if (child.tagName === 'A') { child.className = 'wl'; child.setAttribute('contenteditable', 'false'); }
