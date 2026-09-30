@@ -567,3 +567,39 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 .zv-bar{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px calc(14px + var(--safe-b));color:#fff}
 .zv-bar .ib{color:#fff;background:rgba(255,255,255,.1)}
 .zv-lvl{min-width:56px;text-align:center;font:700 .85rem var(--sans);font-variant-numeric:tabular-nums}
+
+/* ===== Penyegaran tampilan ===== */
+/* mode gelap: lapisan lebih jelas antara latar, kartu, dan garis */
+:root[data-theme="dark"]{
+  --paper:#141312;--surface:#1F1D1B;--surface2:#292623;--line:#302D29;--ink:#F3EEE6;--ink2:#CFC8BD;--muted:#9C958B;
+  --k1:#3A321D;--k2:#22332A;--k3:#1F2D40;--k4:#3D2629;--k5:#2E2640;--k6:#3F2D1D;--k7:#1C3431;--k8:#292623;
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 1px 2px rgba(0,0,0,.35);
+}
+/* kartu catatan */
+.card{border-radius:20px;padding:14px 14px 13px;gap:7px;transition:transform .12s,box-shadow .2s}
+.card:active{transform:scale(.985)}
+:root[data-theme="dark"] .card{border-color:rgba(255,255,255,.05)}
+.card h4{font-size:1.06rem;letter-spacing:-.005em}
+.card h4.muted-t{color:var(--muted);font-style:italic;font-weight:500}
+.card .pv-lines{margin:0;font-size:.8125rem;line-height:1.5;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.card .pv-lines .pl{display:block}
+.card .pv-lines b{font-weight:700;color:var(--ink);font-size:.76rem;letter-spacing:.01em}
+/* foto/sketsa menempel penuh di atas kartu */
+.card.has-media{padding-top:0;overflow:hidden}
+.card.has-media .thumb{width:calc(100% + 28px);max-width:none;margin:0 -14px 4px;border-radius:0;max-height:240px}
+.card.has-media .meta{margin-top:0}
+/* tag di kartu lebih halus */
+.card .tags .tagpill{background:rgba(43,42,40,.07);border:0}
+:root[data-theme="dark"] .card .tags .tagpill{background:rgba(255,255,255,.07)}
+/* chip filter & pencarian */
+.chip{transition:background .15s,color .15s,border-color .15s}
+:root[data-theme="dark"] .chip:not(.on){background:var(--surface);border-color:var(--line)}
+.search{box-shadow:var(--shadow)}
+:root[data-theme="dark"] .search{border-color:var(--line)}
+/* navigasi bawah */
+:root[data-theme="dark"] .nav{background:rgba(24,23,21,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top-color:rgba(255,255,255,.06)}
+.nav a.on .i{transform:translateY(-1px)}
+/* streak */
+:root[data-theme="dark"] .streak{background:linear-gradient(135deg,#3A241C,#2A1D18)}
+.card .media-meta{flex-wrap:nowrap;min-width:0}
+.card .media-meta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}

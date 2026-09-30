@@ -53,6 +53,7 @@ export function applyTheme() {
   root.style.setProperty('--fz', [0.9, 1, 1.1, 1.22][s.fontSize ?? 1]);
   const bg = getComputedStyle(root).getPropertyValue('--paper').trim() || '#FAF7F2';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
+  document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute('content', theme === 'dark' ? 'black-translucent' : 'default');
   setLang(s.followSystemLang ? detectLang() : (s.lang || 'id'));
   try { localStorage.setItem('lembar-theme', JSON.stringify({ theme: s.theme, accent: s.accent, fz: [0.9, 1, 1.1, 1.22][s.fontSize ?? 1], lang: document.documentElement.lang })); } catch (e) { /* noop */ }
 }

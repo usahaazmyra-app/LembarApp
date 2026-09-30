@@ -3,6 +3,7 @@ import * as store from './store.js';
 import { h, iconBtn } from './ui.js';
 import { icon, TYPE_ICON } from './icons.js';
 import { t, fmtRelative, fmtDur, fmtWhen } from './i18n.js';
+import { htmlToPlain } from './lib/richtext.js';
 
 export const MOODS = [
   { n: 'Buruk', c: '#B3261E', mouth: 'M8 16.5c2.5-2.5 5.5-2.5 8 0' },
@@ -61,6 +62,22 @@ function metaTop(n) {
   return h('div', { class: 'meta', style: 'justify-content:space-between;flex-wrap:nowrap' }, h('span', { class: 'meta' }, bits), right ? h('span', { class: 'meta', title: fmtWhen(n.reminder.at) }, right) : null);
 }
 
+// Pratinjau isi kartu: tiap blok/baris tetap terpisah, label template ditebalkan
+function cardPreview(n, skipTitle) {
+  const lines = [];
+  for (const b of n.blocks) {
+    if (b.t !== 'text' && b.t !== 'prompt') continue;
+    const body = htmlToPlain(b.html).split('\n').map(s => s.trim()).filter(Boolean);
+    if (!body.length) continue;
+    if (b.label) lines.push(h('span', { class: 'pl' }, h('b', {}, b.label), ' ', body.join(' · ')));
+    else body.forEach(s => lines.push(h('span', { class: 'pl' }, s)));
+    if (lines.length >= 6) break;
+  }
+  if (skipTitle && lines.length && !n.title && lines[0].textContent === noteTitle(n)) lines.shift();
+  return lines.length ? h('p', { class: 'pv-lines' }, lines) : null;
+}
+function hasText(n) { return n.blocks.some(b => (b.t === 'text' || b.t === 'prompt') && store.htmlToText(b.html).trim()) || n.blocks.some(b => b.t === 'check' && b.items.some(i => i.text)); }
+
 function mediaThumb(b, cls = 'thumb') {
   const img = h('img', { class: cls, alt: '', loading: 'lazy', decoding: 'async' });
   if (b.w && b.h) img.style.aspectRatio = `${b.w} / ${b.h}`;
@@ -110,17 +127,24 @@ export function noteCard(n, opts = {}) {
     return el;
   }
   const media = firstMedia(n);
-  if (media) el.appendChild(mediaThumb(media));
-  el.appendChild(h('h4', {}, noteTitle(n)));
+  if (media) {
+    // foto/sketsa tampil penuh di bagian atas kartu
+    el.classList.add('has-media');
+    const first = [...el.children].find(c => !c.classList.contains('tick') && !c.classList.contains('untick'));
+    el.insertBefore(mediaThumb(media), first || null);
+  }
+  const titled = !!(n.title && n.title.trim()) || hasText(n);
+  if (titled) el.appendChild(h('h4', {}, noteTitle(n)));
+  else if (!media) el.appendChild(h('h4', { class: 'muted-t' }, noteTitle(n)));
   const cl = miniChecklist(n);
   const audio = n.blocks.find(b => b.t === 'audio');
   if (cl && n.type === 'checklist') el.append(...cl);
   else {
-    const sn = snippet(n);
-    const title = noteTitle(n);
-    if (sn && sn !== title && !sn.startsWith(title + '…')) el.appendChild(h('p', {}, sn.startsWith(title) ? sn.slice(title.length).trim() || sn : sn));
+    const pv = cardPreview(n, true);
+    if (pv) el.appendChild(pv);
     if (cl) el.append(...cl);
   }
+  if (media && !titled) el.appendChild(h('div', { class: 'meta media-meta' }, icon(media.t === 'sketch' ? 'sketch' : 'photo', 'xs'), h('span', { title: media.t === 'sketch' ? t('Sketsa') : t('Foto') }, fmtRelative(n.updatedAt))));
   if (audio) el.appendChild(miniWave(audio.peaks));
   const tags = store.noteTags(n).slice(0, 3);
   if (tags.length) el.appendChild(h('div', { class: 'tags' }, tags.map(tg => h('span', { class: 'tagpill' }, '#' + tg))));
