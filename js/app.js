@@ -1,4 +1,5 @@
 // Lembar · bootstrap, router, shell
+import './viewport.js';
 import * as store from './store.js';
 import { h, clear, closeAllOverlays, overlayOpen, snack, sheet, pickFile, vibrate, overlay, settled } from './ui.js';
 import { icon, LOGO_SVG } from './icons.js';

@@ -523,3 +523,13 @@ body.selecting .fab,body.selecting .nav{display:none!important}
 .fmt-pop .fp-tip code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--surface2);border-radius:5px;padding:0 4px;color:var(--ink)}
 .toolbar .tb-glyph{font:800 .8rem var(--sans);letter-spacing:-.02em}
 .rt ol[type="i"]{list-style-type:lower-roman}
+
+/* keyboard HP: aplikasi, lembar bawah, dan notifikasi berada di atas keyboard */
+#app,#overlays{top:var(--vv-top,0px);bottom:var(--kb,0px);height:auto}
+#snack{margin-bottom:var(--kb,0px)}
+.sheet{max-height:calc(var(--vvh,100vh) * .88)}
+.dlg{max-height:calc(var(--vvh,100vh) * .9)}
+.kb-open .toolbar{margin-bottom:6px}
+.kb-open .nav,.kb-open .fab{display:none!important}
+.kb-open .sheet{padding-bottom:16px}
+.kb-open .ed-top{padding-top:calc(6px + var(--safe-t))}
